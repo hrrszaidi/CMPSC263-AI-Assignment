@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Draggable 2D Dice | Stop & Random Face</title>
+    <title>Drag & Bounce Dice | 2D Movement | Stop Button</title>
     <style>
         body {
             margin: 0;
@@ -14,6 +14,10 @@
             display: block;
             width: 100%;
             height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
         }
         .stop-button {
             position: fixed;
@@ -62,13 +66,12 @@
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xadd8e6);
 
-        // --- Orthographic Camera (no perspective, 2D movement) ---
+        // --- Orthographic Camera (2D view, no depth) ---
         let camera;
         let cameraLeft = -5, cameraRight = 5, cameraTop = 5, cameraBottom = -5;
         
         function updateCameraAspect() {
             const aspect = window.innerWidth / window.innerHeight;
-            // Keep vertical size constant (height = 10 units) so width adjusts
             const height = 10;
             const width = height * aspect;
             cameraLeft = -width / 2;
@@ -95,7 +98,7 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- Lighting (still works in orthographic) ---
+        // --- Lighting ---
         const ambientLight = new THREE.AmbientLight(0x4a6175, 0.7);
         scene.add(ambientLight);
 
@@ -197,89 +200,112 @@
         dice.receiveShadow = true;
         scene.add(dice);
 
-        // --- Physics state: only X and Y movement, fixed Z = 0 ---
+        // --- Physics state: only X and Y movement ---
         const diceHalf = 0.45;
-        let posX = 0, posY = 0;    // position in world units (X, Y)
+        let posX = 0, posY = 0;
         let velX = 0, velY = 0;
         const GRAVITY = 12.0;
         const WALL_BOUNCE = 0.95;
         
-        // World boundaries: derived from camera frustum (with padding for dice size)
         let worldLeft, worldRight, worldBottom, worldTop;
-        
         function updateWorldBounds() {
-            // Get camera frustum edges (orthographic)
             worldLeft = camera.left + diceHalf;
             worldRight = camera.right - diceHalf;
             worldBottom = camera.bottom + diceHalf;
             worldTop = camera.top - diceHalf;
         }
-        
         updateWorldBounds();
 
         let rotSpeedX = 0.5, rotSpeedY = 0.7, rotSpeedZ = 0.4;
-        
         dice.position.set(posX, posY, 0);
         
-        // --- Dragging: click and drag in 2D plane (X, Y) ---
+        // --- Dragging: click anywhere on canvas (except button) to drag dice ---
         let isDragging = false;
-        let dragOffsetX = 0, dragOffsetY = 0; // offset from dice center to mouse world pos
-        
-        const raycaster = new THREE.Raycaster();
-        const mouseCoords = new THREE.Vector2();
+        let dragOffsetX = 0, dragOffsetY = 0;
+        let lastMouseX = 0, lastMouseY = 0;
+        let lastDragTime = 0;
+        let dragVelocityX = 0, dragVelocityY = 0;
         
         function getWorldPositionFromMouse(clientX, clientY) {
-            // Convert screen coordinates to world coordinates at Z=0
             const rect = renderer.domElement.getBoundingClientRect();
             const ndcX = (clientX - rect.left) / rect.width * 2 - 1;
             const ndcY = -(clientY - rect.top) / rect.height * 2 + 1;
-            
-            // For orthographic camera, world coordinates are linear with NDC
             const worldX = (ndcX * (camera.right - camera.left) / 2) + (camera.right + camera.left) / 2;
             const worldY = (ndcY * (camera.top - camera.bottom) / 2) + (camera.top + camera.bottom) / 2;
             return { x: worldX, y: worldY };
         }
         
+        function startDrag(clientX, clientY) {
+            const { x, y } = getWorldPositionFromMouse(clientX, clientY);
+            // offset from dice center to click point
+            dragOffsetX = posX - x;
+            dragOffsetY = posY - y;
+            isDragging = true;
+            // Store initial mouse position for velocity calculation
+            lastMouseX = clientX;
+            lastMouseY = clientY;
+            lastDragTime = performance.now();
+            dragVelocityX = 0;
+            dragVelocityY = 0;
+            // Stop any existing motion
+            velX = 0;
+            velY = 0;
+        }
+        
         function onMouseDown(event) {
-            // Check if click hits the dice
-            const { x, y } = getWorldPositionFromMouse(event.clientX, event.clientY);
-            // Simple bounding box check (since orthographic)
-            if (Math.abs(x - posX) <= diceHalf && Math.abs(y - posY) <= diceHalf) {
-                isDragging = true;
-                dragOffsetX = posX - x;
-                dragOffsetY = posY - y;
-                velX = 0;
-                velY = 0;
-            }
+            // Don't start drag if clicking on the button
+            if (event.target.closest('.stop-button')) return;
+            startDrag(event.clientX, event.clientY);
         }
         
         function onMouseMove(event) {
             if (!isDragging) return;
+            
+            const now = performance.now();
+            const dt = Math.min(0.033, (now - lastDragTime) / 1000);
+            if (dt > 0) {
+                // Calculate drag velocity based on mouse movement
+                const dx = event.clientX - lastMouseX;
+                const dy = event.clientY - lastMouseY;
+                // Convert screen movement to world velocity (scale factor)
+                const scale = 0.015;
+                dragVelocityX = dx * scale;
+                dragVelocityY = -dy * scale; // Y axis inverted
+            }
+            
+            // Update dice position based on mouse position
             const { x, y } = getWorldPositionFromMouse(event.clientX, event.clientY);
             let newX = x + dragOffsetX;
             let newY = y + dragOffsetY;
-            // Clamp to world boundaries
+            // Clamp to world boundaries while dragging
             newX = Math.min(worldRight, Math.max(worldLeft, newX));
             newY = Math.min(worldTop, Math.max(worldBottom, newY));
             dice.position.set(newX, newY, 0);
             posX = newX;
             posY = newY;
+            
+            lastMouseX = event.clientX;
+            lastMouseY = event.clientY;
+            lastDragTime = now;
         }
         
         function onMouseUp(event) {
             if (!isDragging) return;
             isDragging = false;
-            // Optionally add a small random spin on release
-            rotSpeedX += (Math.random() - 0.5) * 0.8;
-            rotSpeedY += (Math.random() - 0.5) * 0.8;
-            rotSpeedZ += (Math.random() - 0.5) * 0.8;
+            // Apply drag velocity to physics (intensity influences bounce)
+            velX = dragVelocityX;
+            velY = dragVelocityY;
+            // Also add a little random spin for fun
+            rotSpeedX += (Math.random() - 0.5) * 1.2;
+            rotSpeedY += (Math.random() - 0.5) * 1.2;
+            rotSpeedZ += (Math.random() - 0.5) * 1.2;
         }
         
         window.addEventListener('mousedown', onMouseDown);
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
         
-        // --- Snow particle system (ambiance) ---
+        // --- Snow particle system (2D, falling) ---
         const SNOW_COUNT = 1800;
         const snowGeo = new THREE.BufferGeometry();
         const snowPositions = new Float32Array(SNOW_COUNT * 3);
@@ -320,38 +346,38 @@
             if (posX + diceHalf >= worldRight) {
                 posX = worldRight - diceHalf;
                 velX = -velX * WALL_BOUNCE;
-                rotSpeedX += (Math.random() - 0.5) * 1.0;
-                rotSpeedY += (Math.random() - 0.5) * 1.0;
-                rotSpeedZ += (Math.random() - 0.5) * 1.0;
+                // Add spin on hit
+                rotSpeedX += (Math.random() - 0.5) * 1.2;
+                rotSpeedY += (Math.random() - 0.5) * 1.2;
+                rotSpeedZ += (Math.random() - 0.5) * 1.2;
             } else if (posX - diceHalf <= worldLeft) {
                 posX = worldLeft + diceHalf;
                 velX = -velX * WALL_BOUNCE;
-                rotSpeedX += (Math.random() - 0.5) * 1.0;
-                rotSpeedY += (Math.random() - 0.5) * 1.0;
-                rotSpeedZ += (Math.random() - 0.5) * 1.0;
+                rotSpeedX += (Math.random() - 0.5) * 1.2;
+                rotSpeedY += (Math.random() - 0.5) * 1.2;
+                rotSpeedZ += (Math.random() - 0.5) * 1.2;
             }
             
-            // Y boundaries (top and bottom)
+            // Y boundaries
             if (posY + diceHalf >= worldTop) {
                 posY = worldTop - diceHalf;
                 velY = -velY * WALL_BOUNCE;
-                rotSpeedX += (Math.random() - 0.5) * 1.0;
-                rotSpeedY += (Math.random() - 0.5) * 1.0;
-                rotSpeedZ += (Math.random() - 0.5) * 1.0;
+                rotSpeedX += (Math.random() - 0.5) * 1.2;
+                rotSpeedY += (Math.random() - 0.5) * 1.2;
+                rotSpeedZ += (Math.random() - 0.5) * 1.2;
             } else if (posY - diceHalf <= worldBottom) {
                 posY = worldBottom + diceHalf;
                 velY = -velY * WALL_BOUNCE;
-                rotSpeedX += (Math.random() - 0.5) * 1.0;
-                rotSpeedY += (Math.random() - 0.5) * 1.0;
-                rotSpeedZ += (Math.random() - 0.5) * 1.0;
+                rotSpeedX += (Math.random() - 0.5) * 1.2;
+                rotSpeedY += (Math.random() - 0.5) * 1.2;
+                rotSpeedZ += (Math.random() - 0.5) * 1.2;
             }
         }
         
-        // --- Stop Button: center dice, stop motion, show random face ---
+        // --- Stop Button: freeze dice at center, show random face, reset velocities ---
         const stopButton = document.getElementById('stopButton');
         
         function rotateDiceToShowRandomSide() {
-            // Face normals in object local space (aligned with cube axes)
             const faceNormals = [
                 new THREE.Vector3(1, 0, 0),  // right
                 new THREE.Vector3(-1, 0, 0), // left
@@ -362,12 +388,9 @@
             ];
             const randomIndex = Math.floor(Math.random() * 6);
             const targetNormal = faceNormals[randomIndex];
-            
-            // Camera looks along -Z (since orthographic, direction is (0,0,-1))
             const cameraDir = new THREE.Vector3(0, 0, -1);
             const quat = new THREE.Quaternion().setFromUnitVectors(targetNormal, cameraDir);
             dice.quaternion.copy(quat);
-            
             rotSpeedX = 0;
             rotSpeedY = 0;
             rotSpeedZ = 0;
@@ -417,15 +440,9 @@
                 dice.rotation.x += rotSpeedX * delta;
                 dice.rotation.y += rotSpeedY * delta;
                 dice.rotation.z += rotSpeedZ * delta;
-            } else {
-                // Update physics variables from drag
-                posX = dice.position.x;
-                posY = dice.position.y;
-                velX = 0;
-                velY = 0;
             }
             
-            // Update world bounds in case window resized
+            // Update world bounds in case of resize
             updateWorldBounds();
             
             // Snow animation
@@ -499,7 +516,7 @@
             bigPosAttr.needsUpdate = true;
         }
         
-        console.log('Ready: Click and drag the dice (2D movement). Click STOP to center and show random face.');
+        console.log('Ready: Click anywhere to drag dice. Stop button freezes it at center with random face. Bounce intensity = drag speed.');
     </script>
 </body>
 </html>
