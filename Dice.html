@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Draggable 3D Dice | Blue & White Background</title>
+    <title>Draggable 3D Dice | Blue & White Background | Stop & Random Face</title>
     <style>
         body {
             margin: 0;
@@ -30,12 +30,40 @@
             width: 100%;
             height: 100%;
         }
-        /* Optional: subtle glow for better visibility */
+        /* Stop button at top center */
+        .stop-button {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
+            border-radius: 40px;
+            padding: 10px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            font-family: 'Segoe UI', system-ui, monospace;
+            color: #1e6f9f;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+            transition: all 0.2s ease;
+            letter-spacing: 0.5px;
+        }
+        .stop-button:hover {
+            background: white;
+            transform: translateX(-50%) scale(1.02);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        }
+        .stop-button:active {
+            transform: translateX(-50%) scale(0.98);
+        }
         .instruction {
             position: absolute;
             bottom: 15px;
             left: 15px;
-            color: rgba(255,255,255,0.5);
+            color: rgba(255,255,255,0.6);
             background: rgba(0,0,0,0.3);
             padding: 4px 10px;
             border-radius: 20px;
@@ -46,11 +74,13 @@
             backdrop-filter: blur(4px);
         }
         @media (max-width: 600px) {
+            .stop-button { padding: 6px 18px; font-size: 14px; top: 12px; }
             .instruction { font-size: 9px; }
         }
     </style>
 </head>
 <body>
+    <button class="stop-button" id="stopButton">🎲 STOP & RANDOM FACE</button>
     <div class="instruction">🖱️ Click and drag the dice to move it anywhere</div>
     
     <script type="importmap">
@@ -67,7 +97,7 @@
         // --- Setup Scene with transparent background (CSS gradient shows) ---
         const scene = new THREE.Scene();
         scene.background = null; // 2D static background via CSS
-        scene.fog = new THREE.FogExp2(0x1e6f9f, 0.01); // subtle fog matching blue
+        scene.fog = new THREE.FogExp2(0x1e6f9f, 0.01);
 
         // --- Camera: fixed perspective (static canvas) ---
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -201,7 +231,7 @@
         // --- Physics state (bouncing off screen edges and ground) ---
         const diceHalf = 0.45;
         let posX = 0, posY = 1.2, posZ = 0;
-        let velX = 0, velY = 0, velZ = 0;  // start stationary
+        let velX = 0, velY = 0, velZ = 0;
         const GRAVITY = 12.0;
         const GROUND_BOUNCE = 0.92;
         const WALL_BOUNCE = 0.95;
@@ -212,13 +242,12 @@
 
         // --- Dragging: click and drag to move dice ---
         let isDragging = false;
-        let dragOffset = new THREE.Vector3(); // offset from intersection point to dice center
-        let lastMousePos = new THREE.Vector2(); // for optional velocity, but not needed for pure drag
+        let dragOffset = new THREE.Vector3();
+        let lastMousePos = new THREE.Vector2();
         
         const raycaster = new THREE.Raycaster();
         const mouseCoords = new THREE.Vector2();
 
-        // Helper: get intersection with a plane at given Y level
         function getIntersectWithPlane(planeY, mouseX, mouseY) {
             const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), planeY);
             mouseCoords.set(mouseX, mouseY);
@@ -231,39 +260,31 @@
         }
 
         function onMouseDown(event) {
-            // Check if click hits the dice
             mouseCoords.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
             mouseCoords.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
             raycaster.setFromCamera(mouseCoords, camera);
             const intersects = raycaster.intersectObject(dice);
             if (intersects.length > 0) {
                 isDragging = true;
-                // Calculate drag offset based on intersection point at current dice Y
                 const intersectPoint = getIntersectWithPlane(dice.position.y, mouseCoords.x, mouseCoords.y);
                 if (intersectPoint) {
                     dragOffset.copy(dice.position).sub(intersectPoint);
                 } else {
                     dragOffset.set(0, 0, 0);
                 }
-                // Stop physics velocities while dragging
                 velX = 0; velY = 0; velZ = 0;
-                // Optional: store last mouse position for smoothness
                 lastMousePos.set(event.clientX, event.clientY);
             }
         }
 
         function onMouseMove(event) {
             if (!isDragging) return;
-            
-            // Get intersection with plane at current dice Y (use current Y to follow height)
             const currentY = dice.position.y;
             const intersectPoint = getIntersectWithPlane(currentY, 
                 (event.clientX / renderer.domElement.clientWidth) * 2 - 1,
                 -(event.clientY / renderer.domElement.clientHeight) * 2 + 1);
-            
             if (intersectPoint) {
                 let newPos = intersectPoint.clone().add(dragOffset);
-                // Clamp to reasonable world bounds to avoid going too far
                 newPos.x = Math.min(3.5, Math.max(-3.5, newPos.x));
                 newPos.z = Math.min(3.5, Math.max(-3.5, newPos.z));
                 newPos.y = Math.min(2.8, Math.max(0.5, newPos.y));
@@ -278,9 +299,7 @@
         function onMouseUp(event) {
             if (!isDragging) return;
             isDragging = false;
-            // On release, we set velocities to zero so dice stays where dropped
             velX = 0; velY = 0; velZ = 0;
-            // Optional small random spin to make it lively
             rotSpeedX += (Math.random() - 0.5) * 0.5;
             rotSpeedY += (Math.random() - 0.5) * 0.5;
             rotSpeedZ += (Math.random() - 0.5) * 0.5;
@@ -389,7 +408,7 @@
                 posY = groundY + diceHalf;
                 velY = -velY * GROUND_BOUNCE;
                 if (Math.abs(velY) < 0.4 && posY <= groundY + diceHalf + 0.05) {
-                    velY = -0.8; // keep it slightly bouncy
+                    velY = -0.8;
                 }
                 rotSpeedX += (Math.random() - 0.5) * 0.8;
                 rotSpeedY += (Math.random() - 0.5) * 0.8;
@@ -416,6 +435,63 @@
             }
         }
 
+        // --- STOP BUTTON FUNCTIONALITY: center dice, stop motion, show random side ---
+        const stopButton = document.getElementById('stopButton');
+        
+        function rotateDiceToShowRandomSide() {
+            // Define face normals for each face index (matching materials order)
+            // 0: right (x+), 1: left (x-), 2: up (y+), 3: down (y-), 4: front (z+), 5: back (z-)
+            const faceNormals = [
+                new THREE.Vector3(1, 0, 0),  // right
+                new THREE.Vector3(-1, 0, 0), // left
+                new THREE.Vector3(0, 1, 0),  // up
+                new THREE.Vector3(0, -1, 0), // down
+                new THREE.Vector3(0, 0, 1),  // front
+                new THREE.Vector3(0, 0, -1)  // back
+            ];
+            
+            // Random index 0-5
+            const randomIndex = Math.floor(Math.random() * 6);
+            const targetNormal = faceNormals[randomIndex];
+            
+            // Direction from dice center to camera
+            const diceCenter = dice.position.clone();
+            const cameraDir = camera.position.clone().sub(diceCenter).normalize();
+            
+            // We want targetNormal (local direction) to point towards camera
+            // Compute quaternion that rotates targetNormal to cameraDir
+            const quat = new THREE.Quaternion().setFromUnitVectors(targetNormal, cameraDir);
+            
+            // Apply to dice's rotation
+            dice.quaternion.copy(quat);
+            
+            // Sync rotation Euler for consistency (optional)
+            // Also reset rotation speeds
+            rotSpeedX = 0;
+            rotSpeedY = 0;
+            rotSpeedZ = 0;
+        }
+        
+        function stopDiceAndShowRandomFace() {
+            // If currently dragging, release drag
+            if (isDragging) {
+                isDragging = false;
+            }
+            // Reset velocities
+            velX = 0;
+            velY = 0;
+            velZ = 0;
+            // Center position (world center, typical height)
+            posX = 0;
+            posY = 1.2;
+            posZ = 0;
+            dice.position.set(posX, posY, posZ);
+            // Apply random face rotation
+            rotateDiceToShowRandomSide();
+        }
+        
+        stopButton.addEventListener('click', stopDiceAndShowRandomFace);
+        
         // --- Animation loop ---
         let lastTime = performance.now();
         
@@ -426,7 +502,6 @@
             lastTime = now;
             
             if (!isDragging) {
-                // Physics integration only when not dragging
                 velY -= GRAVITY * delta;
                 posX += velX * delta;
                 posY += velY * delta;
@@ -436,13 +511,11 @@
                 handleWorldBoundaries();
                 handleScreenEdgeCollision();
                 
-                // Small air resistance
                 velX *= 0.998;
                 velZ *= 0.998;
                 
                 dice.position.set(posX, posY, posZ);
                 
-                // Rotation damping and integration
                 rotSpeedX *= (1 - delta * 0.25);
                 rotSpeedY *= (1 - delta * 0.25);
                 rotSpeedZ *= (1 - delta * 0.25);
@@ -450,15 +523,13 @@
                 dice.rotation.y += rotSpeedY * delta;
                 dice.rotation.z += rotSpeedZ * delta;
             } else {
-                // While dragging, sync physics variables to current dice position
                 posX = dice.position.x;
                 posY = dice.position.y;
                 posZ = dice.position.z;
-                // Velocities are zero during drag, but keep them zero
                 velX = 0; velY = 0; velZ = 0;
             }
             
-            // --- Snow animation ---
+            // Snow animation
             const snowPosAttr = snow.geometry.attributes.position;
             const snowArray = snowPosAttr.array;
             for (let i = 0; i < SNOW_COUNT; i++) {
@@ -502,7 +573,6 @@
             snow.rotation.y += 0.001;
             bigSnow.rotation.y -= 0.0008;
             
-            // Dynamic lighting for atmosphere
             const time = Date.now() * 0.003;
             fillLight.intensity = 0.55 + Math.sin(time) * 0.1;
             rimLight.intensity = 0.6 + Math.cos(time * 0.8) * 0.12;
@@ -513,7 +583,6 @@
         
         animate();
         
-        // --- Handle window resize ---
         window.addEventListener('resize', onWindowResize);
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -521,7 +590,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
         
-        // Optional: small glow under dice
         const groundGlow = new THREE.PointLight(0x88bbff, 0.35);
         groundGlow.position.set(0, 0.2, 0);
         scene.add(groundGlow);
@@ -531,7 +599,7 @@
         }
         glowPulse();
         
-        console.log('Ready: Click and drag the dice anywhere! Bounces off walls and ground.');
+        console.log('Ready: Click and drag the dice. Click STOP button to center and show random face.');
     </script>
 </body>
 </html>
