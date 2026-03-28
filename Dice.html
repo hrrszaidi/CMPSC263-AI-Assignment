@@ -3,22 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Grab & Throw Dice | Static 2D Canvas</title>
+    <title>Draggable 3D Dice | Blue & White Background</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background: linear-gradient(145deg, #0a2f44 0%, #1c6e8f 100%);
-            font-family: sans-serif;
+            /* 2D background: 70% blue (top), 30% white (bottom) with dividing line */
+            background: linear-gradient(to bottom, #1e6f9f 0%, #1e6f9f 70%, #f5f5f7 70%, #f5f5f7 100%);
+            position: relative;
+        }
+        /* Dividing line at 70% height */
+        body::after {
+            content: '';
+            position: absolute;
+            top: 70%;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: rgba(0, 0, 0, 0.3);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            pointer-events: none;
+            z-index: 10;
         }
         canvas {
             display: block;
             width: 100%;
             height: 100%;
         }
+        /* Optional: subtle glow for better visibility */
+        .instruction {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            color: rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-family: monospace;
+            pointer-events: none;
+            z-index: 20;
+            backdrop-filter: blur(4px);
+        }
+        @media (max-width: 600px) {
+            .instruction { font-size: 9px; }
+        }
     </style>
 </head>
 <body>
+    <div class="instruction">🖱️ Click and drag the dice to move it anywhere</div>
+    
     <script type="importmap">
         {
             "imports": {
@@ -33,13 +67,12 @@
         // --- Setup Scene with transparent background (CSS gradient shows) ---
         const scene = new THREE.Scene();
         scene.background = null; // 2D static background via CSS
-        scene.fog = new THREE.FogExp2(0x1c6e8f, 0.008);
+        scene.fog = new THREE.FogExp2(0x1e6f9f, 0.01); // subtle fog matching blue
 
         // --- Camera: fixed perspective (static canvas) ---
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(4, 3.2, 5.8);
         camera.lookAt(0, 1, 0);
-        // No OrbitControls – view is static
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -47,8 +80,8 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        // --- Lighting (vibrant) ---
-        const ambientLight = new THREE.AmbientLight(0x4a6175, 0.65);
+        // --- Lighting (rich and warm) ---
+        const ambientLight = new THREE.AmbientLight(0x4a6175, 0.7);
         scene.add(ambientLight);
 
         const mainLight = new THREE.DirectionalLight(0xfff5e6, 1.3);
@@ -76,20 +109,20 @@
         backLight.position.set(0, 1.8, -3);
         scene.add(backLight);
 
-        // --- Ground (white plane, receives shadows, purely visual) ---
+        // --- Ground plane (visual only, white to match bottom CSS) ---
         const groundPlane = new THREE.Mesh(
             new THREE.PlaneGeometry(12, 12),
-            new THREE.MeshStandardMaterial({ color: 0xf0f4ff, roughness: 0.7, metalness: 0.05 })
+            new THREE.MeshStandardMaterial({ color: 0xf8faff, roughness: 0.6, metalness: 0.05 })
         );
         groundPlane.rotation.x = -Math.PI / 2;
         groundPlane.position.y = -0.2;
         groundPlane.receiveShadow = true;
         scene.add(groundPlane);
 
-        const gridHelper = new THREE.GridHelper(12, 24, 0xffffff, 0xaaccff);
+        const gridHelper = new THREE.GridHelper(12, 24, 0xffffff, 0xbbddff);
         gridHelper.position.y = -0.15;
         gridHelper.material.transparent = true;
-        gridHelper.material.opacity = 0.25;
+        gridHelper.material.opacity = 0.3;
         scene.add(gridHelper);
 
         // --- Dice Creation (detailed textures) ---
@@ -165,29 +198,27 @@
         dice.receiveShadow = true;
         scene.add(dice);
 
-        // --- Physics state (bouncing off screen edges) ---
+        // --- Physics state (bouncing off screen edges and ground) ---
         const diceHalf = 0.45;
         let posX = 0, posY = 1.2, posZ = 0;
-        let velX = 1.2, velY = 2.0, velZ = 1.8;
+        let velX = 0, velY = 0, velZ = 0;  // start stationary
         const GRAVITY = 12.0;
-        const GROUND_BOUNCE = 0.95;
-        const WALL_BOUNCE = 0.98;
+        const GROUND_BOUNCE = 0.92;
+        const WALL_BOUNCE = 0.95;
 
-        let rotSpeedX = 1.2, rotSpeedY = 1.5, rotSpeedZ = 1.0;
+        let rotSpeedX = 0.5, rotSpeedY = 0.7, rotSpeedZ = 0.4;
 
         dice.position.set(posX, posY, posZ);
 
-        // --- Interaction: Mouse drag to hold and throw the dice ---
+        // --- Dragging: click and drag to move dice ---
         let isDragging = false;
-        let dragOffset = new THREE.Vector3();
-        let lastMousePos = new THREE.Vector2();
-        let dragVelocity = new THREE.Vector3(0, 0, 0);
-        let lastDragTime = 0;
+        let dragOffset = new THREE.Vector3(); // offset from intersection point to dice center
+        let lastMousePos = new THREE.Vector2(); // for optional velocity, but not needed for pure drag
         
         const raycaster = new THREE.Raycaster();
         const mouseCoords = new THREE.Vector2();
 
-        // Helper: get intersection with a plane at given Y level (for dragging)
+        // Helper: get intersection with a plane at given Y level
         function getIntersectWithPlane(planeY, mouseX, mouseY) {
             const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), planeY);
             mouseCoords.set(mouseX, mouseY);
@@ -207,11 +238,7 @@
             const intersects = raycaster.intersectObject(dice);
             if (intersects.length > 0) {
                 isDragging = true;
-                lastDragTime = performance.now();
-                lastMousePos.set(event.clientX, event.clientY);
-                dragVelocity.set(0, 0, 0);
-                
-                // Compute drag offset relative to the plane at dice's current Y
+                // Calculate drag offset based on intersection point at current dice Y
                 const intersectPoint = getIntersectWithPlane(dice.position.y, mouseCoords.x, mouseCoords.y);
                 if (intersectPoint) {
                     dragOffset.copy(dice.position).sub(intersectPoint);
@@ -220,59 +247,43 @@
                 }
                 // Stop physics velocities while dragging
                 velX = 0; velY = 0; velZ = 0;
+                // Optional: store last mouse position for smoothness
+                lastMousePos.set(event.clientX, event.clientY);
             }
         }
 
         function onMouseMove(event) {
             if (!isDragging) return;
             
-            const now = performance.now();
-            const dt = Math.min(0.033, (now - lastDragTime) / 1000);
-            if (dt > 0) {
-                // Compute screen delta for throw velocity
-                const dx = event.clientX - lastMousePos.x;
-                const dy = event.clientY - lastMousePos.y;
-                const speedFactor = 0.012;
-                dragVelocity.set(dx * speedFactor, -dy * speedFactor, 0);
-                
-                // Move dice in world space along a plane parallel to camera view
-                // Get intersection with plane at current dice Y
-                const currentY = dice.position.y;
-                const intersectPoint = getIntersectWithPlane(currentY, mouseCoords.x, mouseCoords.y);
-                if (intersectPoint) {
-                    let newPos = intersectPoint.clone().add(dragOffset);
-                    // Clamp Y to reasonable range
-                    newPos.y = Math.min(2.8, Math.max(0.5, newPos.y));
-                    dice.position.copy(newPos);
-                    posX = dice.position.x;
-                    posY = dice.position.y;
-                    posZ = dice.position.z;
-                }
-                lastMousePos.set(event.clientX, event.clientY);
+            // Get intersection with plane at current dice Y (use current Y to follow height)
+            const currentY = dice.position.y;
+            const intersectPoint = getIntersectWithPlane(currentY, 
+                (event.clientX / renderer.domElement.clientWidth) * 2 - 1,
+                -(event.clientY / renderer.domElement.clientHeight) * 2 + 1);
+            
+            if (intersectPoint) {
+                let newPos = intersectPoint.clone().add(dragOffset);
+                // Clamp to reasonable world bounds to avoid going too far
+                newPos.x = Math.min(3.5, Math.max(-3.5, newPos.x));
+                newPos.z = Math.min(3.5, Math.max(-3.5, newPos.z));
+                newPos.y = Math.min(2.8, Math.max(0.5, newPos.y));
+                dice.position.copy(newPos);
+                posX = dice.position.x;
+                posY = dice.position.y;
+                posZ = dice.position.z;
             }
-            lastDragTime = now;
+            lastMousePos.set(event.clientX, event.clientY);
         }
 
         function onMouseUp(event) {
             if (!isDragging) return;
             isDragging = false;
-            
-            // Apply throw velocity (map screen delta to world directions)
-            // Use camera orientation to convert screen space velocity to 3D
-            const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
-            const cameraRight = new THREE.Vector3();
-            const cameraUp = new THREE.Vector3();
-            camera.matrixWorld.extractBasis(cameraRight, cameraUp, cameraDirection);
-            
-            const throwVelX = dragVelocity.x * cameraRight.x;
-            const throwVelZ = dragVelocity.x * cameraRight.z;
-            const throwVelY = -dragVelocity.y * 0.8;
-            
-            velX = Math.min(5, Math.max(-5, throwVelX + (Math.random() - 0.5) * 0.5));
-            velZ = Math.min(5, Math.max(-5, throwVelZ + (Math.random() - 0.5) * 0.5));
-            velY = Math.min(4.5, Math.max(-3, throwVelY + 1.2));
-            
-            dragVelocity.set(0, 0, 0);
+            // On release, we set velocities to zero so dice stays where dropped
+            velX = 0; velY = 0; velZ = 0;
+            // Optional small random spin to make it lively
+            rotSpeedX += (Math.random() - 0.5) * 0.5;
+            rotSpeedY += (Math.random() - 0.5) * 0.5;
+            rotSpeedZ += (Math.random() - 0.5) * 0.5;
         }
 
         window.addEventListener('mousedown', onMouseDown);
@@ -280,7 +291,7 @@
         window.addEventListener('mouseup', onMouseUp);
 
         // --- Snow particle system (ambiance) ---
-        const SNOW_COUNT = 2000;
+        const SNOW_COUNT = 2200;
         const snowGeo = new THREE.BufferGeometry();
         const snowPositions = new Float32Array(SNOW_COUNT * 3);
         const snowVelocities = [];
@@ -299,7 +310,7 @@
         const snow = new THREE.Points(snowGeo, snowMat);
         scene.add(snow);
         
-        const bigSnowCount = 600;
+        const bigSnowCount = 700;
         const bigSnowGeo = new THREE.BufferGeometry();
         const bigSnowPositions = new Float32Array(bigSnowCount * 3);
         const bigSnowVel = [];
@@ -317,7 +328,6 @@
         // --- Wall collision: screen edges (2D canvas boundaries) ---
         function handleScreenEdgeCollision() {
             const screenPos = dice.position.clone().project(camera);
-            // screenPos.x,y in range [-1,1] (left -1, right 1, bottom -1, top 1)
             const distance = camera.position.distanceTo(dice.position);
             const screenRadius = (0.6 / distance) * 0.8;
             const leftBound = -1 + screenRadius;
@@ -367,9 +377,9 @@
             }
             
             if (bounced) {
-                rotSpeedX += (Math.random() - 0.5) * 1.2;
-                rotSpeedY += (Math.random() - 0.5) * 1.2;
-                rotSpeedZ += (Math.random() - 0.5) * 1.2;
+                rotSpeedX += (Math.random() - 0.5) * 1.0;
+                rotSpeedY += (Math.random() - 0.5) * 1.0;
+                rotSpeedZ += (Math.random() - 0.5) * 1.0;
             }
         }
 
@@ -378,31 +388,31 @@
             if (posY - diceHalf <= groundY) {
                 posY = groundY + diceHalf;
                 velY = -velY * GROUND_BOUNCE;
-                if (Math.abs(velY) < 0.5 && posY <= groundY + diceHalf + 0.05) {
-                    velY = -1.0;
+                if (Math.abs(velY) < 0.4 && posY <= groundY + diceHalf + 0.05) {
+                    velY = -0.8; // keep it slightly bouncy
                 }
-                rotSpeedX += (Math.random() - 0.5) * 1.0;
-                rotSpeedY += (Math.random() - 0.5) * 1.0;
-                rotSpeedZ += (Math.random() - 0.5) * 1.0;
+                rotSpeedX += (Math.random() - 0.5) * 0.8;
+                rotSpeedY += (Math.random() - 0.5) * 0.8;
+                rotSpeedZ += (Math.random() - 0.5) * 0.8;
             }
         }
 
         function handleWorldBoundaries() {
-            if (posY > 4.0) {
-                posY = 4.0;
+            if (posY > 3.8) {
+                posY = 3.8;
                 velY = -velY * 0.9;
             }
             if (posY < 0.3) {
                 posY = 0.3;
                 velY = -velY * 0.9;
             }
-            if (Math.abs(posX) > 4.5) {
+            if (Math.abs(posX) > 4.2) {
                 velX = -velX * 0.95;
-                posX = Math.sign(posX) * 4.5;
+                posX = Math.sign(posX) * 4.2;
             }
-            if (Math.abs(posZ) > 5) {
+            if (Math.abs(posZ) > 4.8) {
                 velZ = -velZ * 0.95;
-                posZ = Math.sign(posZ) * 5;
+                posZ = Math.sign(posZ) * 4.8;
             }
         }
 
@@ -416,6 +426,7 @@
             lastTime = now;
             
             if (!isDragging) {
+                // Physics integration only when not dragging
                 velY -= GRAVITY * delta;
                 posX += velX * delta;
                 posY += velY * delta;
@@ -425,25 +436,29 @@
                 handleWorldBoundaries();
                 handleScreenEdgeCollision();
                 
+                // Small air resistance
                 velX *= 0.998;
                 velZ *= 0.998;
                 
                 dice.position.set(posX, posY, posZ);
                 
-                rotSpeedX *= (1 - delta * 0.2);
-                rotSpeedY *= (1 - delta * 0.2);
-                rotSpeedZ *= (1 - delta * 0.2);
+                // Rotation damping and integration
+                rotSpeedX *= (1 - delta * 0.25);
+                rotSpeedY *= (1 - delta * 0.25);
+                rotSpeedZ *= (1 - delta * 0.25);
                 dice.rotation.x += rotSpeedX * delta;
                 dice.rotation.y += rotSpeedY * delta;
                 dice.rotation.z += rotSpeedZ * delta;
             } else {
+                // While dragging, sync physics variables to current dice position
                 posX = dice.position.x;
                 posY = dice.position.y;
                 posZ = dice.position.z;
+                // Velocities are zero during drag, but keep them zero
                 velX = 0; velY = 0; velZ = 0;
             }
             
-            // Snow update
+            // --- Snow animation ---
             const snowPosAttr = snow.geometry.attributes.position;
             const snowArray = snowPosAttr.array;
             for (let i = 0; i < SNOW_COUNT; i++) {
@@ -487,7 +502,7 @@
             snow.rotation.y += 0.001;
             bigSnow.rotation.y -= 0.0008;
             
-            // Dynamic lighting
+            // Dynamic lighting for atmosphere
             const time = Date.now() * 0.003;
             fillLight.intensity = 0.55 + Math.sin(time) * 0.1;
             rimLight.intensity = 0.6 + Math.cos(time * 0.8) * 0.12;
@@ -498,7 +513,7 @@
         
         animate();
         
-        // Handle window resize
+        // --- Handle window resize ---
         window.addEventListener('resize', onWindowResize);
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -506,17 +521,17 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
         
-        // Small glow under dice
-        const groundGlow = new THREE.PointLight(0x88bbff, 0.4);
+        // Optional: small glow under dice
+        const groundGlow = new THREE.PointLight(0x88bbff, 0.35);
         groundGlow.position.set(0, 0.2, 0);
         scene.add(groundGlow);
         function glowPulse() {
-            groundGlow.intensity = 0.35 + Math.sin(Date.now() * 0.007) * 0.12;
+            groundGlow.intensity = 0.3 + Math.sin(Date.now() * 0.007) * 0.1;
             requestAnimationFrame(glowPulse);
         }
         glowPulse();
         
-        console.log('Static canvas ready. Click and drag the dice to hold and throw! Walls = window edges.');
+        console.log('Ready: Click and drag the dice anywhere! Bounces off walls and ground.');
     </script>
 </body>
 </html>
