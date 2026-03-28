@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>NEO SNAKE | classic arcade game</title>
+  <style>
+    * {
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: linear-gradient(145deg, #0a0f1e 0%, #0c1222 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Fira Code', 'Courier New', monospace;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .game-container {
+      background: rgba(10, 20, 28, 0.65);
+      backdrop-filter: blur(2px);
+      border-radius: 3rem;
+      padding: 1.5rem;
+      box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(72, 255, 120, 0.25);
+    }
+
+    .game-panel {
+      background: #03060c;
+      border-radius: 2rem;
+      padding: 1.2rem;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.6), 0 8px 20px rgba(0,0,0,0.3);
+    }
+
+    canvas {
+      display: block;
+      margin: 0 auto;
+      border-radius: 1.2rem;
+      box-shadow: 0 0 0 2px #1e2a3a, 0 0 0 5px #0b121f, 0 10px 25px rgba(0,0,0,0.5);
+      cursor: pointer;
+      background-color: #010409;
+    }
+
+    .info-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 1.2rem;
+      margin-bottom: 0.5rem;
+      padding: 0 0.5rem;
+    }
+
+    .score-box {
+      background: #0b0f17;
+      padding: 0.5rem 1.5rem;
+      border-radius: 3rem;
+      font-weight: bold;
+      font-size: 1.7rem;
+      letter-spacing: 2px;
+      color: #b3ffcf;
+      text-shadow: 0 0 6px #1eff6e;
+      font-family: 'Fira Mono', monospace;
+      border: 1px solid #2a3a34;
+      backdrop-filter: blur(4px);
+      box-shadow: inset 0 1px 2px #00000030, 0 5px 12px #00000040;
+    }
+
+    .score-box span {
+      color: #7bc28e;
+      font-size: 1rem;
+      margin-right: 8px;
+      text-shadow: none;
+    }
+
+    .restart-btn {
+      background: #11161f;
+      border: none;
+      font-size: 1.2rem;
+      font-weight: bold;
+      font-family: inherit;
+      padding: 0.5rem 1.8rem;
+      border-radius: 3rem;
+      color: #d2ffd0;
+      cursor: pointer;
+      transition: 0.2s ease;
+      box-shadow: 0 3px 0 #1e3a2a;
+      backdrop-filter: blur(4px);
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .restart-btn:hover {
+      background: #1f2c2a;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 0 #1e3a2a;
+      color: #b1ffc4;
+    }
+
+    .restart-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #1e3a2a;
+    }
+
+    .controls-tip {
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.75rem;
+      color: #6b8b7a;
+      font-weight: 500;
+      background: #0a1018a0;
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 0.3rem 1.2rem;
+      border-radius: 3rem;
+      backdrop-filter: blur(2px);
+    }
+
+    .controls-tip kbd {
+      background: #1c2a24;
+      padding: 0.1rem 0.5rem;
+      border-radius: 8px;
+      font-weight: bold;
+      color: #c6ffbc;
+      margin: 0 3px;
+      font-size: 0.7rem;
+    }
+
+    @media (max-width: 520px) {
+      .game-container {
+        padding: 0.8rem;
+      }
+      .score-box {
+        font-size: 1.2rem;
+        padding: 0.3rem 1.2rem;
+      }
+      .restart-btn {
+        padding: 0.3rem 1.2rem;
+        font-size: 1rem;
+      }
+      canvas {
+        width: 100%;
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+<div>
+  <div class="game-container">
+    <div class="game-panel">
+      <canvas id="snakeCanvas" width="400" height="400"></canvas>
+      <div class="info-bar">
+        <div class="score-box">
+          <span>🍎 SCORE</span> <span id="scoreValue">0</span>
+        </div>
+        <button class="restart-btn" id="restartButton">⟳ RESTART</button>
+      </div>
+      <div class="controls-tip">
+        🎮 <kbd>▲</kbd> <kbd>▼</kbd> <kbd>◀</kbd> <kbd>▶</kbd> &nbsp;&nbsp;|&nbsp;&nbsp; <kbd>R</kbd> restart
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    // ---------- GAME CONFIG ----------
+    const BOARD_SIZE = 20;       // 20x20 grid
+    const CELL_SIZE = 20;        // px (canvas 400x400)
+    const TICK_INTERVAL_MS = 145; // classic speed
+    
+    // DOM elements
+    const canvas = document.getElementById('snakeCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreSpan = document.getElementById('scoreValue');
+    const restartBtn = document.getElementById('restartButton');
+    
+    // Game state
+    let snake = [];           // array of {x, y}
+    let food = { x: 12, y: 12 };
+    let direction = 'RIGHT';      // current moving direction
+    let nextDirection = 'RIGHT';   // requested direction (buffer)
+    let score = 0;
+    let gameActive = true;
+    let intervalId = null;
+    
+    // ---------- HELPER FUNCTIONS ----------
+    // get all empty cells (not occupied by snake)
+    function getEmptyCells(snakeArr) {
+      const occupiedSet = new Set();
+      for (let segment of snakeArr) {
+        occupiedSet.add(`${segment.x},${segment.y}`);
+      }
+      const empty = [];
+      for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+          if (!occupiedSet.has(`${i},${j}`)) {
+            empty.push({ x: i, y: j });
+          }
+        }
+      }
+      return empty;
+    }
+    
+    // generate random food on empty cells, returns true if success, false if no empty cells (win)
+    function generateRandomFood() {
+      const emptyCells = getEmptyCells(snake);
+      if (emptyCells.length === 0) {
+        return false;   // board full → win condition
+      }
+      const randIndex = Math.floor(Math.random() * emptyCells.length);
+      food = emptyCells[randIndex];
+      return true;
+    }
+    
+    // update UI score display
+    function updateScoreUI() {
+      scoreSpan.innerText = score;
+    }
+    
+    // end game (loss or win)
+    function endGame(isWin = false) {
+      if (!gameActive) return; // already ended
+      gameActive = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      draw(); // draw final state + overlay message
+    }
+    
+    // win condition: snake fills entire board
+    function checkWinAndHandle() {
+      if (snake.length === BOARD_SIZE * BOARD_SIZE) {
+        endGame(true);
+        return true;
+      }
+      return false;
+    }
+    
+    // core snake movement logic (called each tick)
+    function moveSnake() {
+      if (!gameActive) return false;
+      
+      // commit the buffered direction if not opposite
+      const oppositeMap = {
+        'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'
+      };
+      if (nextDirection && oppositeMap[nextDirection] !== direction) {
+        direction = nextDirection;
+      }
+      
+      // calculate new head
+      let newHead = { ...snake[0] };
+      switch (direction) {
+        case 'RIGHT': newHead.x += 1; break;
+        case 'LEFT':  newHead.x -= 1; break;
+        case 'UP':    newHead.y -= 1; break;
+        case 'DOWN':  newHead.y += 1; break;
+        default: break;
+      }
+      
+      // check wall collision
+      if (newHead.x < 0 || newHead.x >= BOARD_SIZE || newHead.y < 0 || newHead.y >= BOARD_SIZE) {
+        endGame(false);
+        return false;
+      }
+      
+      // check if food is eaten on this move
+      const willEat = (newHead.x === food.x && newHead.y === food.y);
+      
+      // collision detection: we exclude the tail only if we are NOT eating food
+      let collisionCheckSegments = snake;
+      if (!willEat) {
+        // remove tail for collision check (tail will be popped after moving)
+        collisionCheckSegments = snake.slice(0, -1);
+      }
+      // self-collision check (with proper tail handling)
+      const collidesWithSelf = collisionCheckSegments.some(segment => segment.x === newHead.x && segment.y === newHead.y);
+      if (collidesWithSelf) {
+        endGame(false);
+        return false;
+      }
+      
+      // perform movement & eating
+      // new snake = [newHead, ...oldSnake]
+      let newSnake = [newHead, ...snake];
+      if (!willEat) {
+        newSnake.pop();   // remove tail
+      } else {
+        // increase score and generate new food
+        score++;
+        updateScoreUI();
+        const foodGenerated = generateRandomFood();
+        if (!foodGenerated) {
+          // board is completely full after eating → VICTORY!
+          endGame(true);
+          return false;
+        }
+        // after generating new food, check if snake now fills board (win)
+        if (checkWinAndHandle()) {
+          return false;
+        }
+      }
+      
+      // apply new snake
+      snake = newSnake;
+      
+      // extra safety: after movement, if board full win condition (rare but for completeness)
+      if (snake.length === BOARD_SIZE * BOARD_SIZE) {
+        endGame(true);
+        return false;
+      }
+      
+      return true;
+    }
+    
+    // Game loop update: move then redraw
+    function gameTick() {
+      if (!gameActive) return;
+      moveSnake();     // movement, collisions & win handled inside
+      draw();          // always refresh canvas
+    }
+    
+    // ---------- DRAW EVERYTHING (retro neon style) ----------
+    function draw() {
+      if (!ctx) return;
+      // dark background
+      ctx.fillStyle = '#010409';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // draw subtle grid lines
+      ctx.strokeStyle = '#1c2c2a';
+      ctx.lineWidth = 0.6;
+      for (let i = 0; i <= BOARD_SIZE; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * CELL_SIZE, 0);
+        ctx.lineTo(i * CELL_SIZE, canvas.height);
+        ctx.stroke();
+        ctx.moveTo(0, i * CELL_SIZE);
+        ctx.lineTo(canvas.width, i * CELL_SIZE);
+        ctx.stroke();
+      }
+      
+      // draw food (glossy berry)
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = '#ff3b5c';
+      ctx.beginPath();
+      ctx.arc(food.x * CELL_SIZE + CELL_SIZE/2, food.y * CELL_SIZE + CELL_SIZE/2, CELL_SIZE/2 - 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff859b';
+      ctx.beginPath();
+      ctx.arc(food.x * CELL_SIZE + CELL_SIZE/2 - 1.5, food.y * CELL_SIZE + CELL_SIZE/2 - 2, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffffc0';
+      ctx.beginPath();
+      ctx.arc(food.x * CELL_SIZE + CELL_SIZE/2 - 2.2, food.y * CELL_SIZE + CELL_SIZE/2 - 3, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // draw snake with gradient
+      for (let i = 0; i < snake.length; i++) {
+        const seg = snake[i];
+        const x = seg.x * CELL_SIZE;
+        const y = seg.y * CELL_SIZE;
+        const intensity = 1 - (i / snake.length) * 0.4;
+        const gradient = ctx.createLinearGradient(x, y, x + CELL_SIZE, y + CELL_SIZE);
+        if (i === 0) {
+          gradient.addColorStop(0, '#5eff9e');
+          gradient.addColorStop(1, '#1ed46a');
+        } else {
+          gradient.addColorStop(0, '#38d06c');
+          gradient.addColorStop(1, '#169c48');
+        }
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+        // scale pattern & eyes on head
+        if (i === 0) {
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(x + CELL_SIZE - 6, y + 6, 2.2, 0, Math.PI * 2);
+          ctx.arc(x + 6, y + 6, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#0d261b';
+          ctx.beginPath();
+          ctx.arc(x + CELL_SIZE - 6.8, y + 4.8, 1, 0, Math.PI * 2);
+          ctx.arc(x + 4.8, y + 4.8, 1, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = '#52ff8e80';
+          ctx.fillRect(x + 4, y + 6, 3, 3);
+          ctx.fillRect(x + CELL_SIZE - 7, y + 6, 3, 3);
+        }
+      }
+      
+      // --- Game Over or Win overlay ---
+      if (!gameActive) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = 'bold 22px "Segoe UI", "Fira Mono", monospace';
+        ctx.shadowBlur = 0;
+        let message = '';
+        let subMsg = '';
+        // detect win condition (snake length == total cells)
+        if (snake.length === BOARD_SIZE * BOARD_SIZE) {
+          message = '✦ PERFECT WIN ✦';
+          subMsg = 'You filled the grid!';
+          ctx.fillStyle = '#d5ffaa';
+        } else {
+          message = 'GAME OVER';
+          subMsg = 'press RESTART';
+          ctx.fillStyle = '#ffad8a';
+        }
+        ctx.shadowColor = '#00000080';
+        ctx.shadowBlur = 5;
+        ctx.textAlign = 'center';
+        ctx.fillText(message, canvas.width/2, canvas.height/2 - 15);
+        ctx.font = '14px monospace';
+        ctx.fillStyle = '#b5e3c0';
+        ctx.fillText(subMsg, canvas.width/2, canvas.height/2 + 25);
+        ctx.textAlign = 'left';
+        ctx.shadowBlur = 0;
+      }
+      
+      // extra status: show score on canvas corner (optional)
+      ctx.font = 'bold 14px "Fira Mono"';
+      ctx.fillStyle = '#82e6a8';
+      ctx.shadowBlur = 0;
+      ctx.fillText(`🍎 ${score}`, 12, 28);
+    }
+    
+    // ---------- RESET FULL GAME ----------
+    function resetGame() {
+      // kill existing interval
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      
+      // reset snake (start position: middle, length 3)
+      const startX = Math.floor(BOARD_SIZE / 2);
+      const startY = Math.floor(BOARD_SIZE / 2);
+      snake = [
+        { x: startX, y: startY },
+        { x: startX - 1, y: startY },
+        { x: startX - 2, y: startY }
+      ];
+      
+      // initial direction
+      direction = 'RIGHT';
+      nextDirection = 'RIGHT';
+      score = 0;
+      gameActive = true;
+      updateScoreUI();
+      
+      // generate first food (avoid snake positions)
+      const emptyInit = getEmptyCells(snake);
+      if (emptyInit.length > 0) {
+        const randIndex = Math.floor(Math.random() * emptyInit.length);
+        food = emptyInit[randIndex];
+      } else {
+        // fallback (never happens with 3-length snake)
+        food = { x: 5, y: 5 };
+      }
+      
+      // extra safety: if somehow food overlaps (should never), force relocate
+      const foodCollision = snake.some(seg => seg.x === food.x && seg.y === food.y);
+      if (foodCollision) {
+        const forcedEmpty = getEmptyCells(snake);
+        if (forcedEmpty.length) food = forcedEmpty[0];
+      }
+      
+      // draw fresh board
+      draw();
+      
+      // start new interval
+      intervalId = setInterval(() => {
+        gameTick();
+      }, TICK_INTERVAL_MS);
+    }
+    
+    // ---------- KEYBOARD CONTROLS ----------
+    function handleKeydown(e) {
+      const key = e.key;
+      // restart with 'R' or 'r'
+      if (key === 'r' || key === 'R') {
+        e.preventDefault();
+        resetGame();
+        return;
+      }
+      
+      if (!gameActive) return;
+      
+      let newDir = null;
+      switch (key) {
+        case 'ArrowUp': newDir = 'UP'; break;
+        case 'ArrowDown': newDir = 'DOWN'; break;
+        case 'ArrowLeft': newDir = 'LEFT'; break;
+        case 'ArrowRight': newDir = 'RIGHT'; break;
+        default: return;
+      }
+      e.preventDefault(); // prevent scrolling
+      
+      if (newDir) {
+        const opposite = {
+          'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'
+        };
+        // disallow instant reverse relative to current direction
+        if (opposite[newDir] !== direction) {
+          nextDirection = newDir;
+        }
+      }
+    }
+    
+    // ---------- RESTART BUTTON EVENT ----------
+    restartBtn.addEventListener('click', () => {
+      resetGame();
+    });
+    
+    // ---------- INITIALIZE & PREVENT TOUCH SCROLL (optional for mobile) ----------
+    window.addEventListener('keydown', handleKeydown);
+    // optional: disable context menu on canvas
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    // also disable arrow keys globally without affecting page
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'r' || e.key === 'R') {
+        if (e.target === document.body || e.target === document.documentElement || e.target.tagName !== 'INPUT') {
+          // prevent default only for game keys
+          if (e.key.startsWith('Arrow') || e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+          }
+        }
+      }
+    });
+    
+    // start game for first time
+    resetGame();
+    
+    // optional: make canvas focusable for better mobile? not needed, but add passive
+    // additional resilience: re-draw on window resize (not needed but just in case)
+    window.addEventListener('resize', () => draw());
+  })();
+</script>
+</body>
+</html>
