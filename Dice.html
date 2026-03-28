@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Bouncing 3D Dice with Snow | Three.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 15px;
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            pointer-events: none;
+            z-index: 10;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        #controls-note {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255,255,255,0.7);
+            background: rgba(0,0,0,0.4);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            pointer-events: none;
+            font-family: monospace;
+        }
+        @media (max-width: 600px) {
+            #info { font-size: 10px; top: 10px; left: 10px; }
+            #controls-note { font-size: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        🎲 BOUNCING DICE | ❄️ SNOW STORM
+    </div>
+    <div id="controls-note">
+        🖱️ Drag to orbit | Scroll to zoom
+    </div>
+
+    <!-- Import Three.js core and add-ons -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Setup Scene, Camera, Renderer ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a4c8c); // Deep winter blue background
+        scene.fog = new THREE.FogExp2(0x0a4c8c, 0.008); // subtle fog for depth
+
+        // Camera: perspective camera, positioned to see the bounce action
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(3, 2.5, 5);
+        camera.lookAt(0, 1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // enable shadows for realistic bounce
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // softer shadows
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // --- Controls (allow user to orbit, enhances experience) ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;      // inertial movement
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = false;
+        controls.enableZoom = true;
+        controls.enablePan = true;
+        controls.zoomSpeed = 1.2;
+        controls.target.set(0, 1, 0);
+        
+        // --- Lighting System ---
+        // Ambient light (soft fill)
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.65);
+        scene.add(ambientLight);
+        
+        // Main directional light (simulating sunlight, casts shadows)
+        const mainLight = new THREE.DirectionalLight(0xfff5e6, 1.2);
+        mainLight.position.set(4, 8, 3);
+        mainLight.castShadow = true;
+        mainLight.receiveShadow = false;
+        mainLight.shadow.mapSize.width = 1024;
+        mainLight.shadow.mapSize.height = 1024;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 10;
+        mainLight.shadow.camera.left = -5;
+        mainLight.shadow.camera.right = 5;
+        mainLight.shadow.camera.top = 5;
+        mainLight.shadow.camera.bottom = -5;
+        scene.add(mainLight);
+        
+        // Fill light from below and back rim light to highlight edges
+        const fillLight = new THREE.PointLight(0x4466cc, 0.4);
+        fillLight.position.set(1, 2, 2);
+        scene.add(fillLight);
+        
+        // Warm back rim light to make dice pop
+        const rimLight = new THREE.PointLight(0xffaa66, 0.5);
+        rimLight.position.set(-1.5, 2.5, -2);
+        scene.add(rimLight);
+        
+        // Additional cool fill from the side
+        const coolFill = new THREE.PointLight(0x88aaff, 0.35);
+        coolFill.position.set(2, 1, 1.5);
+        scene.add(coolFill);
+        
+        // --- White Ground Plane (receives shadows, reflects bounce) ---
+        const groundPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xf8f8fc, roughness: 0.7, metalness: 0.05 })
+        );
+        groundPlane.rotation.x = -Math.PI / 2;
+        groundPlane.position.y = 0;
+        groundPlane.receiveShadow = true;
+        scene.add(groundPlane);
+        
+        // Optional: subtle grid helper on ground for visual reference (semi-transparent)
+        const gridHelper = new THREE.GridHelper(8, 20, 0xffffff, 0xccccdd);
+        gridHelper.position.y = 0.01; // slightly above ground to avoid z-fighting
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.25;
+        scene.add(gridHelper);
+        
+        // --- Create Dice Textures (6 faces with proper dice dot patterns) ---
+        // Function to generate canvas texture for a dice face with given number of dots (1-6)
+        function createDiceFaceTexture(number) {
+            const size = 512;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Background: glossy off-white with subtle gradient
+            const grad = ctx.createLinearGradient(0, 0, size, size);
+            grad.addColorStop(0, '#fef9ef');
+            grad.addColorStop(1, '#f5ede0');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Rounded border effect
+            ctx.strokeStyle = '#b0a088';
+            ctx.lineWidth = size * 0.025;
+            ctx.strokeRect(size * 0.05, size * 0.05, size * 0.9, size * 0.9);
+            
+            // Dot color: deep black with slight shadow
+            ctx.fillStyle = '#1a1a2e';
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = size * 0.02;
+            
+            const dotRadius = size * 0.09;
+            const offset = size * 0.25;
+            const center = size / 2;
+            
+            // Helper to draw a dot at (x, y)
+            function drawDot(x, y) {
+                ctx.beginPath();
+                ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                // inner highlight
+                ctx.fillStyle = '#2d2d44';
+                ctx.beginPath();
+                ctx.arc(x - dotRadius*0.2, y - dotRadius*0.2, dotRadius*0.25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1a1a2e';
+            }
+            
+            ctx.shadowBlur = size * 0.015;
+            
+            // Pattern based on dice number
+            switch(number) {
+                case 1: // center
+                    drawDot(center, center);
+                    break;
+                case 2: // top-left, bottom-right
+                    drawDot(offset, offset);
+                    drawDot(size - offset, size - offset);
+                    break;
+                case 3: // diagonal three: corners + center
+                    drawDot(offset, offset);
+                    drawDot(center, center);
+                    drawDot(size - offset, size - offset);
+                    break;
+                case 4: // four corners
+                    drawDot(offset, offset);
+                    drawDot(size - offset, offset);
+                    drawDot(offset, size - offset);
+                    drawDot(size - offset, size - offset);
+                    break;
+                case 5: // four corners + center
+                    drawDot(offset, offset);
+                    drawDot(size - offset, offset);
+                    drawDot(offset, size - offset);
+                    drawDot(size - offset, size - offset);
+                    drawDot(center, center);
+                    break;
+                case 6: // two rows of three (left and right columns)
+                    const colX1 = size * 0.25;
+                    const colX2 = size * 0.75;
+                    const rowStep = size * 0.23;
+                    const startY = size * 0.22;
+                    for (let i = 0; i < 3; i++) {
+                        drawDot(colX1, startY + i * rowStep);
+                        drawDot(colX2, startY + i * rowStep);
+                    }
+                    break;
+            }
+            
+            // Optional: add a subtle glossy coating effect
+            ctx.fillStyle = 'rgba(255,255,240,0.1)';
+            ctx.fillRect(0, 0, size, size);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            texture.anisotropy = 16;
+            return texture;
+        }
+        
+        // Create materials for each face: order: x+, x-, y+, y-, z+, z-
+        // Standard dice arrangement: 
+        // Right (+x): 2 dots, Left (-x): 5, Up (+y): 3, Down (-y): 4, Front (+z): 1, Back (-z): 6
+        const faceNumbers = [2, 5, 3, 4, 1, 6];
+        const materials = faceNumbers.map(num => {
+            const texture = createDiceFaceTexture(num);
+            const material = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.28,
+                metalness: 0.15,
+                emissive: 0x000000,
+                flatShading: false
+            });
+            return material;
+        });
+        
+        // Create the dice mesh (cube geometry size 1x1x1)
+        const diceGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const dice = new THREE.Mesh(diceGeometry, materials);
+        dice.castShadow = true;
+        dice.receiveShadow = true;
+        scene.add(dice);
+        
+        // --- Physics properties for bouncing ---
+        // Ground collision plane at y = 0, dice half-size = 0.5 => collision when y - 0.5 <= 0
+        const diceRadius = 0.5;
+        let posY = 2.0;          // starting height: center at 2 (bottom at 1.5 above ground)
+        let velY = 0.0;          // initial vertical velocity
+        const gravity = 12.0;     // gravity strength (units/s^2)
+        const restitution = 0.98; // slightly less than perfect for natural look (bounces almost forever)
+        
+        // Set initial position
+        dice.position.set(0, posY, 0);
+        
+        // Optional: random initial rotation for visual appeal
+        dice.rotation.x = 0.3;
+        dice.rotation.z = 0.5;
+        dice.rotation.y = 0.7;
+        
+        // Angular velocity for continuous spinning while bouncing (makes it lively)
+        let rotSpeedX = 1.6;
+        let rotSpeedY = 2.1;
+        let rotSpeedZ = 1.4;
+        
+        // --- Snow Particle System ---
+        const SNOW_COUNT = 1800;
+        const snowGeometry = new THREE.BufferGeometry();
+        const snowPositions = new Float32Array(SNOW_COUNT * 3);
+        const snowVelocities = []; // store fall speed and slight drift
+        
+        // Randomize initial positions and velocities
+        for (let i = 0; i < SNOW_COUNT; i++) {
+            // Positions: X range [-5.5, 5.5], Y range [0, 7], Z range [-5, 5]
+            snowPositions[i*3] = (Math.random() - 0.5) * 11;
+            snowPositions[i*3+1] = Math.random() * 7;
+            snowPositions[i*3+2] = (Math.random() - 0.5) * 10;
+            // Store velocity: fall speed between 0.8 and 2.2 units/sec, slight horizontal drift
+            snowVelocities.push({
+                y: 0.8 + Math.random() * 1.6,
+                x: (Math.random() - 0.5) * 0.6,
+                z: (Math.random() - 0.5) * 0.5
+            });
+        }
+        snowGeometry.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+        
+        // Snow material: small white points with slight transparency
+        const snowMaterial = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.08,
+            transparent: true,
+            opacity: 0.85,
+            blending: THREE.AdditiveBlending
+        });
+        
+        const snowParticles = new THREE.Points(snowGeometry, snowMaterial);
+        snowParticles.castShadow = false;
+        scene.add(snowParticles);
+        
+        // --- Optional: add few floating snowflakes as larger particles? Not needed but adds charm ---
+        // Extra larger snowflakes (few)
+        const bigSnowCount = 300;
+        const bigSnowGeo = new THREE.BufferGeometry();
+        const bigSnowPositions = new Float32Array(bigSnowCount * 3);
+        const bigSnowVel = [];
+        for (let i = 0; i < bigSnowCount; i++) {
+            bigSnowPositions[i*3] = (Math.random() - 0.5) * 12;
+            bigSnowPositions[i*3+1] = Math.random() * 8;
+            bigSnowPositions[i*3+2] = (Math.random() - 0.5) * 12;
+            bigSnowVel.push({
+                y: 0.5 + Math.random() * 1.2,
+                x: (Math.random() - 0.5) * 0.4,
+                z: (Math.random() - 0.5) * 0.4
+            });
+        }
+        bigSnowGeo.setAttribute('position', new THREE.BufferAttribute(bigSnowPositions, 3));
+        const bigSnowMat = new THREE.PointsMaterial({
+            color: 0xeef4ff,
+            size: 0.13,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending
+        });
+        const bigSnowParticles = new THREE.Points(bigSnowGeo, bigSnowMat);
+        scene.add(bigSnowParticles);
+        
+        // --- Simple helper to add a few ambient floating dust (optional) just for atmosphere ---
+        // Creates a subtle wintry feel
+        
+        // --- Animation Loop & Time Management ---
+        let lastTime = performance.now();
+        
+        // For rotating the dice continuously and bouncing physics
+        function animate() {
+            const now = performance.now();
+            let delta = Math.min(0.033, (now - lastTime) / 1000);
+            if (delta <= 0) {
+                delta = 0.016;
+            }
+            lastTime = now;
+            
+            // ----- DICE PHYSICS (Bouncing) -----
+            // Apply gravity
+            velY -= gravity * delta;
+            posY += velY * delta;
+            
+            // Collision detection with ground (y = 0 plane, dice bottom at posY - 0.5)
+            if (posY - diceRadius <= 0) {
+                posY = diceRadius; // reposition exactly on ground
+                velY = -velY * restitution;
+                // Add a tiny random rotation impulse on bounce for realism
+                rotSpeedX += (Math.random() - 0.5) * 1.2;
+                rotSpeedY += (Math.random() - 0.5) * 1.2;
+                rotSpeedZ += (Math.random() - 0.5) * 1.2;
+                // Clamp speeds to avoid crazy spin
+                rotSpeedX = Math.min(4.5, Math.max(-4.5, rotSpeedX));
+                rotSpeedY = Math.min(4.5, Math.max(-4.5, rotSpeedY));
+                rotSpeedZ = Math.min(4.5, Math.max(-4.5, rotSpeedZ));
+                
+                // If velocity is extremely low but still bouncing, keep motion
+                if (Math.abs(velY) < 0.2 && posY <= diceRadius + 0.01) {
+                    // tiny nudge to avoid dead stop but with high restitution it's rarely needed
+                    if (velY > -0.1) velY = -0.5;
+                }
+            }
+            
+            // Update dice position
+            dice.position.y = posY;
+            
+            // Update dice rotation with continuous spin (makes it look like it's rolling while bouncing)
+            dice.rotation.x += rotSpeedX * delta;
+            dice.rotation.y += rotSpeedY * delta;
+            dice.rotation.z += rotSpeedZ * delta;
+            
+            // Small damping on rotation speed for more natural feel over time
+            rotSpeedX *= (1 - delta * 0.3);
+            rotSpeedY *= (1 - delta * 0.3);
+            rotSpeedZ *= (1 - delta * 0.3);
+            
+            // ----- SNOW ANIMATION (both particle systems) -----
+            // Update main snow positions
+            const positionsAttr = snowGeometry.attributes.position;
+            const snowArray = positionsAttr.array;
+            for (let i = 0; i < SNOW_COUNT; i++) {
+                // update Y position
+                let y = snowArray[i*3+1];
+                y -= snowVelocities[i].y * delta;
+                // horizontal drift
+                let x = snowArray[i*3] + snowVelocities[i].x * delta;
+                let z = snowArray[i*3+2] + snowVelocities[i].z * delta;
+                
+                // Reset if below ground or too high / out of bounds
+                if (y < -0.2 || y > 8 || Math.abs(x) > 6.5 || Math.abs(z) > 6.2) {
+                    y = 5.5 + Math.random() * 2.5;
+                    x = (Math.random() - 0.5) * 10;
+                    z = (Math.random() - 0.5) * 9;
+                    // Randomize speed again for variety
+                    snowVelocities[i].y = 0.8 + Math.random() * 1.8;
+                    snowVelocities[i].x = (Math.random() - 0.5) * 0.7;
+                    snowVelocities[i].z = (Math.random() - 0.5) * 0.6;
+                }
+                snowArray[i*3] = x;
+                snowArray[i*3+1] = y;
+                snowArray[i*3+2] = z;
+            }
+            positionsAttr.needsUpdate = true;
+            
+            // Update larger snow particles
+            const bigPosAttr = bigSnowGeo.attributes.position;
+            const bigArray = bigPosAttr.array;
+            for (let i = 0; i < bigSnowCount; i++) {
+                let y = bigArray[i*3+1];
+                y -= bigSnowVel[i].y * delta;
+                let x = bigArray[i*3] + bigSnowVel[i].x * delta;
+                let z = bigArray[i*3+2] + bigSnowVel[i].z * delta;
+                if (y < -0.3 || y > 7.5 || Math.abs(x) > 7 || Math.abs(z) > 7) {
+                    y = 5 + Math.random() * 3;
+                    x = (Math.random() - 0.5) * 11;
+                    z = (Math.random() - 0.5) * 11;
+                    bigSnowVel[i].y = 0.5 + Math.random() * 1.4;
+                    bigSnowVel[i].x = (Math.random() - 0.5) * 0.5;
+                    bigSnowVel[i].z = (Math.random() - 0.5) * 0.5;
+                }
+                bigArray[i*3] = x;
+                bigArray[i*3+1] = y;
+                bigArray[i*3+2] = z;
+            }
+            bigPosAttr.needsUpdate = true;
+            
+            // Gentle rotation for snow to give extra depth (very subtle)
+            snowParticles.rotation.y += 0.002;
+            bigSnowParticles.rotation.y -= 0.001;
+            
+            // --- Dynamic Lighting Effect: slight color shift based on dice height ---
+            // Adds atmospheric flair
+            const t = (posY - 0.5) / 2.5; // range 0 to 1 roughly
+            fillLight.intensity = 0.45 + Math.sin(Date.now() * 0.002) * 0.08;
+            rimLight.intensity = 0.55 + Math.sin(Date.now() * 0.0017) * 0.1;
+            
+            // Update controls and render
+            controls.update(); // only needed if damping or autoRotate enabled
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        
+        // Start the animation
+        animate();
+        
+        // --- Handle window resize ---
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Small console log to confirm everything loaded
+        console.log('3D Scene Ready: Bouncing Dice with Snow ❄️');
+        
+        // Optional: Add a soft circular gradient on ground (visual enhancement) - simple decal
+        const circleDecalGeometry = new THREE.CircleGeometry(1.8, 16);
+        const decalMaterial = new THREE.MeshStandardMaterial({
+            color: 0xd0d8ff,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.DoubleSide
+        });
+        const shadowDecal = new THREE.Mesh(circleDecalGeometry, decalMaterial);
+        shadowDecal.rotation.x = -Math.PI / 2;
+        shadowDecal.position.y = 0.005;
+        shadowDecal.receiveShadow = false;
+        scene.add(shadowDecal);
+        
+        // Add a soft point light under dice for subtle rim light on ground
+        const groundGlow = new THREE.PointLight(0x88aaff, 0.3);
+        groundGlow.position.set(0, 0.3, 0);
+        scene.add(groundGlow);
+        
+        // Animate the glow intensity slightly
+        function animateGlow() {
+            groundGlow.intensity = 0.25 + Math.sin(Date.now() * 0.005) * 0.1;
+            requestAnimationFrame(animateGlow);
+        }
+        animateGlow();
+        
+        // Simple floating particles for extra magic (tiny dust)
+        const dustCount = 800;
+        const dustGeo = new THREE.BufferGeometry();
+        const dustPositions = new Float32Array(dustCount * 3);
+        for (let i = 0; i < dustCount; i++) {
+            dustPositions[i*3] = (Math.random() - 0.5) * 7;
+            dustPositions[i*3+1] = Math.random() * 3;
+            dustPositions[i*3+2] = (Math.random() - 0.5) * 6;
+        }
+        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+        const dustMat = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.02, transparent: true, opacity: 0.4 });
+        const dustPoints = new THREE.Points(dustGeo, dustMat);
+        scene.add(dustPoints);
+        
+        // drift dust slowly
+        function animateDust() {
+            const positions = dustGeo.attributes.position.array;
+            for (let i = 0; i < dustCount; i++) {
+                positions[i*3+1] += 0.002;
+                if (positions[i*3+1] > 3.2) positions[i*3+1] = 0;
+            }
+            dustGeo.attributes.position.needsUpdate = true;
+            requestAnimationFrame(animateDust);
+        }
+        animateDust();
+        
+        // Also make the main directional light follow camera slightly? Not needed but adds charm
+        // Instead, add a small rotating helper light
+        const colorLight = new THREE.PointLight(0xffaa88, 0.4);
+        colorLight.position.set(1.5, 2, 1);
+        scene.add(colorLight);
+        
+        function animateColorLight() {
+            colorLight.intensity = 0.35 + Math.sin(Date.now() * 0.0023) * 0.15;
+            requestAnimationFrame(animateColorLight);
+        }
+        animateColorLight();
+        
+    </script>
+</body>
+</html>
