@@ -3,27 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Draggable 3D Dice | Blue & White Background | Stop & Random Face</title>
+    <title>Draggable 3D Dice | Flat Light Blue | Stop & Random Face</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            /* 2D background: 70% blue (top), 30% white (bottom) with dividing line */
-            background: linear-gradient(to bottom, #1e6f9f 0%, #1e6f9f 70%, #f5f5f7 70%, #f5f5f7 100%);
-            position: relative;
-        }
-        /* Dividing line at 70% height */
-        body::after {
-            content: '';
-            position: absolute;
-            top: 70%;
-            left: 0;
-            width: 100%;
-            height: 3px;
-            background: rgba(0, 0, 0, 0.3);
-            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            pointer-events: none;
-            z-index: 10;
+            /* Flat light blue background */
+            background: #add8e6; /* Light blue */
         }
         canvas {
             display: block;
@@ -47,7 +33,6 @@
             cursor: pointer;
             z-index: 100;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            backdrop-filter: blur(4px);
             transition: all 0.2s ease;
             letter-spacing: 0.5px;
         }
@@ -63,8 +48,8 @@
             position: absolute;
             bottom: 15px;
             left: 15px;
-            color: rgba(255,255,255,0.6);
-            background: rgba(0,0,0,0.3);
+            color: rgba(0,0,0,0.6);
+            background: rgba(255,255,255,0.6);
             padding: 4px 10px;
             border-radius: 20px;
             font-size: 12px;
@@ -94,17 +79,17 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- Setup Scene with transparent background (CSS gradient shows) ---
+        // --- Setup Scene with flat light blue background ---
         const scene = new THREE.Scene();
-        scene.background = null; // 2D static background via CSS
-        scene.fog = new THREE.FogExp2(0x1e6f9f, 0.01);
+        scene.background = new THREE.Color(0xadd8e6); // Light blue flat background
+        // No fog, no ground
 
-        // --- Camera: fixed perspective (static canvas) ---
+        // --- Camera: perspective view (simple, no grid/floor) ---
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(4, 3.2, 5.8);
         camera.lookAt(0, 1, 0);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -138,22 +123,6 @@
         const backLight = new THREE.PointLight(0x77aaff, 0.45);
         backLight.position.set(0, 1.8, -3);
         scene.add(backLight);
-
-        // --- Ground plane (visual only, white to match bottom CSS) ---
-        const groundPlane = new THREE.Mesh(
-            new THREE.PlaneGeometry(12, 12),
-            new THREE.MeshStandardMaterial({ color: 0xf8faff, roughness: 0.6, metalness: 0.05 })
-        );
-        groundPlane.rotation.x = -Math.PI / 2;
-        groundPlane.position.y = -0.2;
-        groundPlane.receiveShadow = true;
-        scene.add(groundPlane);
-
-        const gridHelper = new THREE.GridHelper(12, 24, 0xffffff, 0xbbddff);
-        gridHelper.position.y = -0.15;
-        gridHelper.material.transparent = true;
-        gridHelper.material.opacity = 0.3;
-        scene.add(gridHelper);
 
         // --- Dice Creation (detailed textures) ---
         function createDiceFaceTexture(number) {
@@ -228,12 +197,12 @@
         dice.receiveShadow = true;
         scene.add(dice);
 
-        // --- Physics state (bouncing off screen edges and ground) ---
+        // --- Physics state (bouncing off screen edges) ---
+        // No ground plane; collisions only with screen edges (walls are window borders)
         const diceHalf = 0.45;
         let posX = 0, posY = 1.2, posZ = 0;
         let velX = 0, velY = 0, velZ = 0;
         const GRAVITY = 12.0;
-        const GROUND_BOUNCE = 0.92;
         const WALL_BOUNCE = 0.95;
 
         let rotSpeedX = 0.5, rotSpeedY = 0.7, rotSpeedZ = 0.4;
@@ -243,7 +212,6 @@
         // --- Dragging: click and drag to move dice ---
         let isDragging = false;
         let dragOffset = new THREE.Vector3();
-        let lastMousePos = new THREE.Vector2();
         
         const raycaster = new THREE.Raycaster();
         const mouseCoords = new THREE.Vector2();
@@ -273,7 +241,6 @@
                     dragOffset.set(0, 0, 0);
                 }
                 velX = 0; velY = 0; velZ = 0;
-                lastMousePos.set(event.clientX, event.clientY);
             }
         }
 
@@ -285,6 +252,7 @@
                 -(event.clientY / renderer.domElement.clientHeight) * 2 + 1);
             if (intersectPoint) {
                 let newPos = intersectPoint.clone().add(dragOffset);
+                // Clamp to world bounds to prevent going too far
                 newPos.x = Math.min(3.5, Math.max(-3.5, newPos.x));
                 newPos.z = Math.min(3.5, Math.max(-3.5, newPos.z));
                 newPos.y = Math.min(2.8, Math.max(0.5, newPos.y));
@@ -293,7 +261,6 @@
                 posY = dice.position.y;
                 posZ = dice.position.z;
             }
-            lastMousePos.set(event.clientX, event.clientY);
         }
 
         function onMouseUp(event) {
@@ -402,20 +369,7 @@
             }
         }
 
-        function handleGroundCollision() {
-            const groundY = 0.0;
-            if (posY - diceHalf <= groundY) {
-                posY = groundY + diceHalf;
-                velY = -velY * GROUND_BOUNCE;
-                if (Math.abs(velY) < 0.4 && posY <= groundY + diceHalf + 0.05) {
-                    velY = -0.8;
-                }
-                rotSpeedX += (Math.random() - 0.5) * 0.8;
-                rotSpeedY += (Math.random() - 0.5) * 0.8;
-                rotSpeedZ += (Math.random() - 0.5) * 0.8;
-            }
-        }
-
+        // No ground collision; we keep Y within reasonable bounds using world boundaries
         function handleWorldBoundaries() {
             if (posY > 3.8) {
                 posY = 3.8;
@@ -439,8 +393,7 @@
         const stopButton = document.getElementById('stopButton');
         
         function rotateDiceToShowRandomSide() {
-            // Define face normals for each face index (matching materials order)
-            // 0: right (x+), 1: left (x-), 2: up (y+), 3: down (y-), 4: front (z+), 5: back (z-)
+            // Face normals for each face (matching materials order)
             const faceNormals = [
                 new THREE.Vector3(1, 0, 0),  // right
                 new THREE.Vector3(-1, 0, 0), // left
@@ -450,43 +403,31 @@
                 new THREE.Vector3(0, 0, -1)  // back
             ];
             
-            // Random index 0-5
             const randomIndex = Math.floor(Math.random() * 6);
             const targetNormal = faceNormals[randomIndex];
             
-            // Direction from dice center to camera
             const diceCenter = dice.position.clone();
             const cameraDir = camera.position.clone().sub(diceCenter).normalize();
             
-            // We want targetNormal (local direction) to point towards camera
-            // Compute quaternion that rotates targetNormal to cameraDir
             const quat = new THREE.Quaternion().setFromUnitVectors(targetNormal, cameraDir);
-            
-            // Apply to dice's rotation
             dice.quaternion.copy(quat);
             
-            // Sync rotation Euler for consistency (optional)
-            // Also reset rotation speeds
             rotSpeedX = 0;
             rotSpeedY = 0;
             rotSpeedZ = 0;
         }
         
         function stopDiceAndShowRandomFace() {
-            // If currently dragging, release drag
             if (isDragging) {
                 isDragging = false;
             }
-            // Reset velocities
             velX = 0;
             velY = 0;
             velZ = 0;
-            // Center position (world center, typical height)
             posX = 0;
             posY = 1.2;
             posZ = 0;
             dice.position.set(posX, posY, posZ);
-            // Apply random face rotation
             rotateDiceToShowRandomSide();
         }
         
@@ -507,7 +448,6 @@
                 posY += velY * delta;
                 posZ += velZ * delta;
                 
-                handleGroundCollision();
                 handleWorldBoundaries();
                 handleScreenEdgeCollision();
                 
@@ -590,16 +530,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
         
-        const groundGlow = new THREE.PointLight(0x88bbff, 0.35);
-        groundGlow.position.set(0, 0.2, 0);
-        scene.add(groundGlow);
-        function glowPulse() {
-            groundGlow.intensity = 0.3 + Math.sin(Date.now() * 0.007) * 0.1;
-            requestAnimationFrame(glowPulse);
-        }
-        glowPulse();
-        
-        console.log('Ready: Click and drag the dice. Click STOP button to center and show random face.');
+        console.log('Ready: Click and drag the dice. Click STOP to center and show random face.');
     </script>
 </body>
 </html>
