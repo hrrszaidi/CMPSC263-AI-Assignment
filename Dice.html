@@ -3,85 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Bouncing Dice with Walls & Snow | 3D Dice, 2D Background</title>
+    <title>Grab & Throw Dice | 3D Bouncing with Edge Walls</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            font-family: 'Segoe UI', 'Poppins', sans-serif;
-            /* 2D Background: deep winter sky gradient (blue theme, fully 2D, no 3D interference) */
-            background: linear-gradient(145deg, #0b3b5f 0%, #1b5a8c 40%, #2c7ab0 100%);
-            /* optional subtle animated grain? but keep it 2D */
+            /* 2D static background: cool winter gradient */
+            background: linear-gradient(145deg, #0a2f44 0%, #1c6e8f 100%);
+            font-family: sans-serif;
         }
-        /* Canvas will be transparent so that CSS background shows through */
         canvas {
             display: block;
             width: 100%;
             height: 100%;
         }
-        #info {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            background: rgba(0,0,0,0.55);
-            padding: 10px 18px;
-            border-radius: 40px;
-            backdrop-filter: blur(8px);
-            pointer-events: none;
-            z-index: 20;
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            font-family: monospace;
-        }
-        #controls-note {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: rgba(255,255,255,0.85);
-            background: rgba(0,0,0,0.4);
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            pointer-events: none;
-            backdrop-filter: blur(4px);
-            font-family: monospace;
-            z-index: 20;
-        }
-        .badge {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            color: rgba(255,255,255,0.6);
-            background: rgba(0,0,0,0.3);
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 10px;
-            pointer-events: none;
-            font-family: monospace;
-            z-index: 20;
-        }
-        @media (max-width: 600px) {
-            #info { font-size: 10px; top: 12px; left: 12px; }
-            #controls-note { font-size: 9px; }
-            .badge { font-size: 8px; }
-        }
+        /* No UI elements - clean */
     </style>
 </head>
 <body>
-    <div id="info">
-        🎲 SUPER BOUNCY DICE | 🧱 WALL COLLISIONS | ❄️ SNOW
-    </div>
-    <div id="controls-note">
-        🖱️ Drag to orbit | Scroll to zoom | Watch it bounce off walls!
-    </div>
-    <div class="badge">
-        2D Background | 3D Dice + Snow
-    </div>
-
-    <!-- Import Three.js core and add-ons -->
     <script type="importmap">
         {
             "imports": {
@@ -95,43 +34,37 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        // --- Setup Scene with transparent background (2D CSS background will show) ---
+        // --- Setup Scene with transparent background (CSS gradient shows) ---
         const scene = new THREE.Scene();
-        // NO background color set -> transparent, so CSS gradient peeks through
-        scene.background = null;
-        // Optional subtle fog to blend objects with 2D background? No, keep crisp but add slight atmospheric
-        scene.fog = new THREE.FogExp2(0x1b5a8c, 0.012); // matches CSS mid-tone, gives depth
-        
-        // Camera: perspective, good view of walls
+        scene.background = null; // 2D static background via CSS
+        scene.fog = new THREE.FogExp2(0x1c6e8f, 0.008); // subtle blend
+
+        // --- Camera: perspective, good view for interaction ---
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(4, 3.5, 5.5);
+        camera.position.set(4, 3.2, 5.8);
         camera.lookAt(0, 1, 0);
-        
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha true for transparency
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;      // shadows make dice pop
+        renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
-        
-        // --- Controls (allow orbit) ---
+
+        // --- OrbitControls (camera control) but will not interfere with dice dragging ---
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.dampingFactor = 0.06;
-        controls.autoRotate = false;
-        controls.enableZoom = true;
+        controls.dampingFactor = 0.05;
         controls.zoomSpeed = 1.0;
-        controls.target.set(0, 1.2, 0);
-        
-        // --- Lighting System (rich and dramatic) ---
-        const ambientLight = new THREE.AmbientLight(0x4a5b6e, 0.65);
+        controls.enablePan = true;
+        controls.target.set(0, 1, 0);
+
+        // --- Lighting (vibrant) ---
+        const ambientLight = new THREE.AmbientLight(0x4a6175, 0.65);
         scene.add(ambientLight);
-        
-        // Main directional light (cast shadows)
+
         const mainLight = new THREE.DirectionalLight(0xfff5e6, 1.3);
         mainLight.position.set(4, 7, 3);
         mainLight.castShadow = true;
-        mainLight.receiveShadow = false;
         mainLight.shadow.mapSize.width = 1024;
         mainLight.shadow.mapSize.height = 1024;
         mainLight.shadow.camera.near = 0.5;
@@ -141,94 +74,72 @@
         mainLight.shadow.camera.top = 5;
         mainLight.shadow.camera.bottom = -5;
         scene.add(mainLight);
-        
-        // Fill lights for color
-        const fillLight = new THREE.PointLight(0x88aaff, 0.5);
-        fillLight.position.set(1.5, 2, 2.2);
+
+        const fillLight = new THREE.PointLight(0x88aaff, 0.55);
+        fillLight.position.set(1.5, 2.2, 2);
         scene.add(fillLight);
-        
+
         const rimLight = new THREE.PointLight(0xffaa77, 0.6);
-        rimLight.position.set(-1.8, 2.2, -2);
+        rimLight.position.set(-1.8, 2.5, -2.2);
         scene.add(rimLight);
-        
-        const backCool = new THREE.PointLight(0x77aaff, 0.45);
-        backCool.position.set(0, 1.5, -2.8);
-        scene.add(backCool);
-        
-        // --- White Ground Plane (receives shadows, helps with bounce visibility) ---
+
+        const backLight = new THREE.PointLight(0x77aaff, 0.45);
+        backLight.position.set(0, 1.8, -3);
+        scene.add(backLight);
+
+        // --- Ground (white plane, receives shadows, but not used for wall collision, purely visual) ---
         const groundPlane = new THREE.Mesh(
-            new THREE.PlaneGeometry(7.2, 7.2),
-            new THREE.MeshStandardMaterial({ color: 0xf5f8ff, roughness: 0.65, metalness: 0.05 })
+            new THREE.PlaneGeometry(12, 12),
+            new THREE.MeshStandardMaterial({ color: 0xf0f4ff, roughness: 0.7, metalness: 0.05 })
         );
         groundPlane.rotation.x = -Math.PI / 2;
-        groundPlane.position.y = 0;
+        groundPlane.position.y = -0.2; // lowered slightly to create floating effect
         groundPlane.receiveShadow = true;
         scene.add(groundPlane);
-        
-        // Subtle grid on ground (visual reference for walls)
-        const gridHelper = new THREE.GridHelper(7.2, 24, 0xffffff, 0xaaccff);
-        gridHelper.position.y = 0.01;
+
+        // subtle grid helper
+        const gridHelper = new THREE.GridHelper(12, 24, 0xffffff, 0xaaccff);
+        gridHelper.position.y = -0.15;
         gridHelper.material.transparent = true;
-        gridHelper.material.opacity = 0.3;
+        gridHelper.material.opacity = 0.25;
         scene.add(gridHelper);
-        
-        // --- Optional: semi-transparent walls VISUALS (to indicate boundaries, but collisions are handled separately) ---
-        // We'll create a wireframe cube or outline to show the playfield
-        const boundarySize = 4.6; // total width from -2.3 to 2.3
-        const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x88bbff, transparent: true, opacity: 0.12, side: THREE.DoubleSide });
-        const wireframeMat = new THREE.LineBasicMaterial({ color: 0xbbddff });
-        // Create a visual bounding box (edges only) to show walls
-        const boxWidth = 4.6;   // X range: -2.3 to 2.3
-        const boxHeight = 2.5;
-        const boxDepth = 4.6;
-        const boundingBoxGeometry = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth);
-        const edgesGeo = new THREE.EdgesGeometry(boundingBoxGeometry);
-        const wireframe = new THREE.LineSegments(edgesGeo, wireframeMat);
-        wireframe.position.set(0, 1.25, 0);
-        wireframe.scale.set(1, 1, 1);
-        scene.add(wireframe);
-        
-        // Also add faint corner markers (optional)
-        
-        // --- Dice Creation (detailed textures for each face) ---
+
+        // --- Dice Creation (detailed textures) ---
         function createDiceFaceTexture(number) {
             const size = 512;
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
-            
-            // glossy off-white background
+
             const grad = ctx.createLinearGradient(0, 0, size, size);
             grad.addColorStop(0, '#fffaf2');
             grad.addColorStop(1, '#f5ede0');
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, size, size);
-            
-            // border
+
             ctx.strokeStyle = '#b59e7a';
             ctx.lineWidth = size * 0.025;
             ctx.strokeRect(size * 0.05, size * 0.05, size * 0.9, size * 0.9);
-            
+
             ctx.fillStyle = '#1f1a2e';
             ctx.shadowColor = 'rgba(0,0,0,0.4)';
             ctx.shadowBlur = size * 0.02;
             const dotRadius = size * 0.09;
             const offset = size * 0.26;
             const center = size / 2;
-            
+
             function drawDot(x, y) {
                 ctx.beginPath();
                 ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
                 ctx.fill();
-                // inner highlight
                 ctx.fillStyle = '#3a334d';
                 ctx.beginPath();
                 ctx.arc(x - dotRadius*0.2, y - dotRadius*0.2, dotRadius*0.27, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.fillStyle = '#1f1a2e';
             }
-            
+
             ctx.shadowBlur = size * 0.015;
             switch(number) {
                 case 1: drawDot(center, center); break;
@@ -236,7 +147,7 @@
                 case 3: drawDot(offset, offset); drawDot(center, center); drawDot(size - offset, size - offset); break;
                 case 4: drawDot(offset, offset); drawDot(size - offset, offset); drawDot(offset, size - offset); drawDot(size - offset, size - offset); break;
                 case 5: drawDot(offset, offset); drawDot(size - offset, offset); drawDot(offset, size - offset); drawDot(size - offset, size - offset); drawDot(center, center); break;
-                case 6: 
+                case 6:
                     const colX1 = size * 0.26;
                     const colX2 = size * 0.74;
                     const rowStep = size * 0.24;
@@ -252,116 +163,305 @@
             texture.needsUpdate = true;
             return texture;
         }
-        
-        // Standard dice mapping: Right(+x):2, Left(-x):5, Up(+y):3, Down(-y):4, Front(+z):1, Back(-z):6
+
         const faceNumbers = [2, 5, 3, 4, 1, 6];
         const materials = faceNumbers.map(num => new THREE.MeshStandardMaterial({
             map: createDiceFaceTexture(num),
             roughness: 0.25,
             metalness: 0.12,
-            emissive: 0x000000
         }));
-        
-        const diceGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+        const diceGeometry = new THREE.BoxGeometry(0.9, 0.9, 0.9); // slightly smaller for better visibility
         const dice = new THREE.Mesh(diceGeometry, materials);
         dice.castShadow = true;
         dice.receiveShadow = true;
         scene.add(dice);
-        
-        // --- BOUNCIER PHYSICS + WALL COLLISIONS ---
-        // Dimensions: dice half-size = 0.5
-        const halfSize = 0.5;
-        // Playfield boundaries (walls at these edges)
-        const boundaryX = { min: -2.3, max: 2.3 };
-        const boundaryZ = { min: -2.3, max: 2.3 };
-        // Ground at y = 0, dice bottom at y - halfSize >= 0
-        
-        // Physics state
-        let posX = 0, posZ = 0;
-        let velX = (Math.random() - 0.5) * 3.2;   // initial horizontal speed (bouncy!)
-        let velZ = (Math.random() - 0.5) * 3.2;
-        let posY = 1.6;    // start above ground
-        let velY = 2.8;     // initial upward push
-        
-        const GRAVITY = 13.5;
-        const GROUND_RESTITUTION = 0.995;   // VERY bouncy (almost perfect)
-        const WALL_RESTITUTION = 0.99;       // high bounce off walls
-        
-        // Initial random spin
-        let rotSpeedX = (Math.random() - 0.5) * 4;
-        let rotSpeedY = (Math.random() - 0.5) * 4;
-        let rotSpeedZ = (Math.random() - 0.5) * 4;
-        
+
+        // --- Physics state (bouncing off screen edges) ---
+        // The "walls" are the edges of the webpage (2D screen boundaries)
+        // We'll convert world position to screen coordinates each frame and bounce.
+        const diceHalf = 0.45; // half size of dice
+        let posX = 0, posY = 1.2, posZ = 0;
+        let velX = 1.2, velY = 2.0, velZ = 1.8;
+        const GRAVITY = 12.0;
+        const GROUND_BOUNCE = 0.95;   // bouncy on ground plane
+        const WALL_BOUNCE = 0.98;      // bouncy on screen edges
+
+        // Rotation speeds
+        let rotSpeedX = 1.2, rotSpeedY = 1.5, rotSpeedZ = 1.0;
+
         dice.position.set(posX, posY, posZ);
+
+        // --- Interaction: Mouse drag to hold and throw the dice ---
+        let isDragging = false;
+        let dragPlane = null; // 3D plane for dragging
+        let dragOffset = new THREE.Vector3();
+        let lastMousePos = new THREE.Vector2();
+        let dragVelocity = new THREE.Vector3(0, 0, 0);
+        let lastDragTime = 0;
         
-        // --- Snow Particle System (double layer for richness) ---
-        const SNOW_COUNT = 2200;
-        const snowGeometry = new THREE.BufferGeometry();
+        // Raycaster for picking the dice
+        const raycaster = new THREE.Raycaster();
+        const mouseCoords = new THREE.Vector2();
+
+        function getDragPlaneAtY(yLevel) {
+            // Create a plane parallel to ground at given Y
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), yLevel);
+            return plane;
+        }
+
+        function getIntersectWithPlane(plane, mouseX, mouseY, camera) {
+            mouseCoords.set(mouseX, mouseY);
+            raycaster.setFromCamera(mouseCoords, camera);
+            const intersectionPoint = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(plane, intersectionPoint)) {
+                return intersectionPoint;
+            }
+            return null;
+        }
+
+        function onMouseDown(event) {
+            // Check if click hits the dice
+            mouseCoords.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+            mouseCoords.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+            raycaster.setFromCamera(mouseCoords, camera);
+            const intersects = raycaster.intersectObject(dice);
+            if (intersects.length > 0) {
+                isDragging = true;
+                // Disable orbit controls while dragging
+                controls.enabled = false;
+                // Record drag start time and position
+                lastDragTime = performance.now();
+                lastMousePos.set(event.clientX, event.clientY);
+                dragVelocity.set(0, 0, 0);
+                // Create a drag plane at dice's current Y level to move smoothly
+                const dragPlaneY = dice.position.y;
+                const plane = getDragPlaneAtY(dragPlaneY);
+                const worldIntersect = getIntersectWithPlane(plane, mouseCoords.x, mouseCoords.y, camera);
+                if (worldIntersect) {
+                    dragOffset.copy(dice.position).sub(worldIntersect);
+                } else {
+                    dragOffset.set(0, 0, 0);
+                }
+                // Stop physics velocities while dragging
+                velX = 0; velY = 0; velZ = 0;
+            }
+        }
+
+        function onMouseMove(event) {
+            if (!isDragging) return;
+            
+            const now = performance.now();
+            const dt = Math.min(0.033, (now - lastDragTime) / 1000);
+            if (dt > 0) {
+                // compute mouse delta for velocity on release
+                const dx = event.clientX - lastMousePos.x;
+                const dy = event.clientY - lastMousePos.y;
+                // Convert screen delta to world velocity (scale factor for natural throw)
+                // We'll apply velocity based on movement speed (pixels per second)
+                const speedFactor = 0.012;
+                dragVelocity.set(dx * speedFactor, -dy * speedFactor, 0);
+                // Also incorporate Z movement based on horizontal drag? We'll add XZ from mouse X, and Y from mouse Y
+                // But for 3D feel, we'll also use camera orientation to map drag to world X and Z
+                // Simpler: map X movement to world X, Y movement to world Z? Better: use camera right/up vectors.
+                const cameraRight = new THREE.Vector3();
+                const cameraUp = new THREE.Vector3();
+                camera.matrixWorld.extractBasis(cameraRight, cameraUp, new THREE.Vector3());
+                // For 3D dragging, we want to move in the camera's horizontal plane but keep Y constant
+                const moveX = (dx * 0.008) * cameraRight.x;
+                const moveZ = (dx * 0.008) * cameraRight.z;
+                const moveY = (-dy * 0.008);
+                // Update dice position (move within bounds later)
+                let newX = dice.position.x + moveX;
+                let newZ = dice.position.z + moveZ;
+                let newY = dice.position.y + moveY;
+                // Clamp to keep within reasonable range (prevent flying too high/low)
+                newY = Math.min(2.8, Math.max(0.5, newY));
+                dice.position.set(newX, newY, newZ);
+                posX = newX; posY = newY; posZ = newZ;
+                
+                lastMousePos.set(event.clientX, event.clientY);
+            }
+            lastDragTime = now;
+        }
+
+        function onMouseUp(event) {
+            if (!isDragging) return;
+            isDragging = false;
+            controls.enabled = true; // re-enable orbit controls
+            
+            // Apply throw velocity: use dragVelocity and add some vertical/horizontal
+            // Convert the recorded drag velocity (screen space) to world velocities.
+            // We'll compute a vector based on camera orientation.
+            const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+            const cameraRight = new THREE.Vector3();
+            const cameraUp = new THREE.Vector3();
+            camera.matrixWorld.extractBasis(cameraRight, cameraUp, cameraDirection);
+            
+            // map dragVelocity.x to XZ plane using camera right, dragVelocity.y to vertical and camera up component
+            const throwVelX = dragVelocity.x * cameraRight.x;
+            const throwVelZ = dragVelocity.x * cameraRight.z;
+            const throwVelY = -dragVelocity.y * 0.8; // upward/downward component
+            
+            // Add a little extra based on speed and ensure it's not too high
+            velX = Math.min(5, Math.max(-5, throwVelX + (Math.random() - 0.5) * 0.5));
+            velZ = Math.min(5, Math.max(-5, throwVelZ + (Math.random() - 0.5) * 0.5));
+            velY = Math.min(4.5, Math.max(-3, throwVelY + 1.2)); // slight upward bias for fun
+            
+            // Reset drag velocity
+            dragVelocity.set(0, 0, 0);
+        }
+
+        window.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        // --- Snow particle system (for ambiance) ---
+        const SNOW_COUNT = 2000;
+        const snowGeo = new THREE.BufferGeometry();
         const snowPositions = new Float32Array(SNOW_COUNT * 3);
-        const snowVel = [];
-        
+        const snowVelocities = [];
         for (let i = 0; i < SNOW_COUNT; i++) {
-            snowPositions[i*3] = (Math.random() - 0.5) * 12;
+            snowPositions[i*3] = (Math.random() - 0.5) * 15;
             snowPositions[i*3+1] = Math.random() * 8;
-            snowPositions[i*3+2] = (Math.random() - 0.5) * 10;
-            snowVel.push({
-                y: 0.7 + Math.random() * 1.9,
-                x: (Math.random() - 0.5) * 0.65,
-                z: (Math.random() - 0.5) * 0.6
+            snowPositions[i*3+2] = (Math.random() - 0.5) * 12;
+            snowVelocities.push({
+                y: 0.6 + Math.random() * 1.7,
+                x: (Math.random() - 0.5) * 0.5,
+                z: (Math.random() - 0.5) * 0.5
             });
         }
-        snowGeometry.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
-        const snowMaterial = new THREE.PointsMaterial({
-            color: 0xffffff,
-            size: 0.075,
-            transparent: true,
-            opacity: 0.85,
-            blending: THREE.AdditiveBlending
-        });
-        const snowParticles = new THREE.Points(snowGeometry, snowMaterial);
-        scene.add(snowParticles);
+        snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+        const snowMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.07, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending });
+        const snow = new THREE.Points(snowGeo, snowMat);
+        scene.add(snow);
         
-        // Larger snowflakes
-        const bigSnowCount = 500;
+        // Larger flakes
+        const bigSnowCount = 600;
         const bigSnowGeo = new THREE.BufferGeometry();
         const bigSnowPositions = new Float32Array(bigSnowCount * 3);
         const bigSnowVel = [];
         for (let i = 0; i < bigSnowCount; i++) {
-            bigSnowPositions[i*3] = (Math.random() - 0.5) * 13;
+            bigSnowPositions[i*3] = (Math.random() - 0.5) * 14;
             bigSnowPositions[i*3+1] = Math.random() * 7.5;
-            bigSnowPositions[i*3+2] = (Math.random() - 0.5) * 11;
-            bigSnowVel.push({
-                y: 0.5 + Math.random() * 1.3,
-                x: (Math.random() - 0.5) * 0.45,
-                z: (Math.random() - 0.5) * 0.45
-            });
+            bigSnowPositions[i*3+2] = (Math.random() - 0.5) * 13;
+            bigSnowVel.push({ y: 0.4 + Math.random() * 1.2, x: (Math.random() - 0.5) * 0.4, z: (Math.random() - 0.5) * 0.4 });
         }
         bigSnowGeo.setAttribute('position', new THREE.BufferAttribute(bigSnowPositions, 3));
-        const bigSnowMat = new THREE.PointsMaterial({
-            color: 0xeef5ff,
-            size: 0.12,
-            transparent: true,
-            opacity: 0.7,
-            blending: THREE.AdditiveBlending
-        });
-        const bigSnowParticles = new THREE.Points(bigSnowGeo, bigSnowMat);
-        scene.add(bigSnowParticles);
-        
-        // --- Dust / ambient floating particles for extra winter magic ---
-        const dustCount = 1200;
-        const dustGeo = new THREE.BufferGeometry();
-        const dustPositions = new Float32Array(dustCount * 3);
-        for (let i = 0; i < dustCount; i++) {
-            dustPositions[i*3] = (Math.random() - 0.5) * 7;
-            dustPositions[i*3+1] = Math.random() * 2.5;
-            dustPositions[i*3+2] = (Math.random() - 0.5) * 7;
+        const bigSnowMat = new THREE.PointsMaterial({ color: 0xeef5ff, size: 0.11, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending });
+        const bigSnow = new THREE.Points(bigSnowGeo, bigSnowMat);
+        scene.add(bigSnow);
+
+        // --- Wall collision: screen edges (2D) by converting world position to screen coordinates ---
+        function handleScreenEdgeCollision() {
+            // Get dice world position and project to screen
+            const screenPos = dice.position.clone().project(camera);
+            // screenPos.x,y in range [-1,1] (left -1, right 1, bottom -1, top 1)
+            let bounceX = false, bounceZ = false;
+            let newX = posX, newZ = posZ;
+            
+            // Tolerance for dice half-size in screen space? We approximate by using the projected size.
+            // Since dice is not a point, we need to check if its projected bounding box would exceed edges.
+            // We'll compute the approximate screen radius of the dice based on distance.
+            const distance = camera.position.distanceTo(dice.position);
+            const screenRadius = (0.6 / distance) * 0.8; // rough angular size factor
+            const leftBound = -1 + screenRadius;
+            const rightBound = 1 - screenRadius;
+            const bottomBound = -1 + screenRadius;
+            const topBound = 1 - screenRadius;
+            
+            let bounced = false;
+            if (screenPos.x < leftBound) {
+                // Hit left edge -> invert X velocity and reposition in world
+                velX = -velX * WALL_BOUNCE;
+                // reposition to just inside edge in screen space: need to convert back to world
+                // Simple: adjust world X so that screen X becomes leftBound
+                // We'll use ray from camera to find new X at same Y,Z.
+                const targetScreenX = leftBound;
+                const rayDir = new THREE.Vector3(targetScreenX, screenPos.y, 1).unproject(camera).sub(camera.position).normalize();
+                const t = (dice.position.y - camera.position.y) / rayDir.y;
+                const newWorldX = camera.position.x + rayDir.x * t;
+                posX = newWorldX;
+                dice.position.x = posX;
+                bounced = true;
+            } else if (screenPos.x > rightBound) {
+                velX = -velX * WALL_BOUNCE;
+                const targetScreenX = rightBound;
+                const rayDir = new THREE.Vector3(targetScreenX, screenPos.y, 1).unproject(camera).sub(camera.position).normalize();
+                const t = (dice.position.y - camera.position.y) / rayDir.y;
+                const newWorldX = camera.position.x + rayDir.x * t;
+                posX = newWorldX;
+                dice.position.x = posX;
+                bounced = true;
+            }
+            
+            if (screenPos.y < bottomBound) {
+                velY = -velY * WALL_BOUNCE;
+                // Adjust Y position
+                const targetScreenY = bottomBound;
+                const rayDir = new THREE.Vector3(screenPos.x, targetScreenY, 1).unproject(camera).sub(camera.position).normalize();
+                const t = (dice.position.z - camera.position.z) / rayDir.z; // approximate
+                const newWorldY = camera.position.y + rayDir.y * t;
+                posY = Math.max(0.4, newWorldY);
+                dice.position.y = posY;
+                bounced = true;
+            } else if (screenPos.y > topBound) {
+                velY = -velY * WALL_BOUNCE;
+                const targetScreenY = topBound;
+                const rayDir = new THREE.Vector3(screenPos.x, targetScreenY, 1).unproject(camera).sub(camera.position).normalize();
+                const t = (dice.position.z - camera.position.z) / rayDir.z;
+                const newWorldY = camera.position.y + rayDir.y * t;
+                posY = Math.min(3.5, newWorldY);
+                dice.position.y = posY;
+                bounced = true;
+            }
+            
+            if (bounced) {
+                // Add spin impulse
+                rotSpeedX += (Math.random() - 0.5) * 1.2;
+                rotSpeedY += (Math.random() - 0.5) * 1.2;
+                rotSpeedZ += (Math.random() - 0.5) * 1.2;
+            }
         }
-        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-        const dustMat = new THREE.PointsMaterial({ color: 0xcceeff, size: 0.02, transparent: true, opacity: 0.4 });
-        const dustPoints = new THREE.Points(dustGeo, dustMat);
-        scene.add(dustPoints);
-        
-        // --- Animation & physics update with wall collisions ---
+
+        // --- Ground collision (Y-axis, bottom of dice) ---
+        function handleGroundCollision() {
+            const groundY = 0.0;
+            if (posY - diceHalf <= groundY) {
+                posY = groundY + diceHalf;
+                velY = -velY * GROUND_BOUNCE;
+                if (Math.abs(velY) < 0.5 && posY <= groundY + diceHalf + 0.05) {
+                    velY = -1.0; // keep it bouncing
+                }
+                // add random spin on ground hit
+                rotSpeedX += (Math.random() - 0.5) * 1.0;
+                rotSpeedY += (Math.random() - 0.5) * 1.0;
+                rotSpeedZ += (Math.random() - 0.5) * 1.0;
+            }
+        }
+
+        // --- Also limit ceiling and floor in world Y to prevent flying away ---
+        function handleWorldBoundaries() {
+            if (posY > 4.0) {
+                posY = 4.0;
+                velY = -velY * 0.9;
+            }
+            if (posY < 0.3) {
+                posY = 0.3;
+                velY = -velY * 0.9;
+            }
+            // Soft X/Z boundaries to prevent going too far from camera view
+            if (Math.abs(posX) > 4.5) {
+                velX = -velX * 0.95;
+                posX = Math.sign(posX) * 4.5;
+            }
+            if (Math.abs(posZ) > 5) {
+                velZ = -velZ * 0.95;
+                posZ = Math.sign(posZ) * 5;
+            }
+        }
+
+        // --- Animation loop ---
         let lastTime = performance.now();
         
         function animate() {
@@ -370,102 +470,56 @@
             if (delta <= 0) delta = 0.016;
             lastTime = now;
             
-            // === DICE PHYSICS (Super bouncy + Wall collisions) ===
-            // Update velocities
-            velY -= GRAVITY * delta;
-            posY += velY * delta;
-            posX += velX * delta;
-            posZ += velZ * delta;
-            
-            // --- Ground collision (bouncy) ---
-            if (posY - halfSize <= 0) {
-                posY = halfSize;
-                velY = -velY * GROUND_RESTITUTION;
-                // Extra "bouncier" effect: small random boost to make it lively
-                if (Math.abs(velY) < 0.5 && posY <= halfSize + 0.02) {
-                    velY = -1.2; // little push up to avoid sticking
-                }
-                // Add random spin impulse on ground hit
-                rotSpeedX += (Math.random() - 0.5) * 1.3;
-                rotSpeedY += (Math.random() - 0.5) * 1.3;
-                rotSpeedZ += (Math.random() - 0.5) * 1.3;
-                // also tiny horizontal nudge for more chaotic bounce
-                velX += (Math.random() - 0.5) * 0.5;
-                velZ += (Math.random() - 0.5) * 0.5;
-                // clamp speeds to keep within play but fast
-                velX = Math.min(4.2, Math.max(-4.2, velX));
-                velZ = Math.min(4.2, Math.max(-4.2, velZ));
+            if (!isDragging) {
+                // Apply physics
+                velY -= GRAVITY * delta;
+                posX += velX * delta;
+                posY += velY * delta;
+                posZ += velZ * delta;
+                
+                handleGroundCollision();
+                handleWorldBoundaries();
+                
+                // Apply screen-edge collision (walls are sides of webpage)
+                handleScreenEdgeCollision();
+                
+                // Apply small damping to velocities to avoid infinite sliding
+                velX *= 0.998;
+                velZ *= 0.998;
+                
+                // Update dice position
+                dice.position.set(posX, posY, posZ);
+                
+                // Rotation physics
+                rotSpeedX *= (1 - delta * 0.2);
+                rotSpeedY *= (1 - delta * 0.2);
+                rotSpeedZ *= (1 - delta * 0.2);
+                dice.rotation.x += rotSpeedX * delta;
+                dice.rotation.y += rotSpeedY * delta;
+                dice.rotation.z += rotSpeedZ * delta;
+            } else {
+                // While dragging, update physics state to match dragged position
+                posX = dice.position.x;
+                posY = dice.position.y;
+                posZ = dice.position.z;
+                // keep velocities zero during drag
+                velX = 0; velY = 0; velZ = 0;
             }
             
-            // --- Wall collisions (X axis) ---
-            if (posX + halfSize >= boundaryX.max) {
-                posX = boundaryX.max - halfSize;
-                velX = -velX * WALL_RESTITUTION;
-                // extra bounce impulse on wall hit
-                rotSpeedX += (Math.random() - 0.5) * 1.1;
-                rotSpeedY += (Math.random() - 0.5) * 1.1;
-                rotSpeedZ += (Math.random() - 0.5) * 1.1;
-                // small random perturbation to keep dynamic
-                velX += (Math.random() - 0.5) * 0.3;
-            }
-            if (posX - halfSize <= boundaryX.min) {
-                posX = boundaryX.min + halfSize;
-                velX = -velX * WALL_RESTITUTION;
-                rotSpeedX += (Math.random() - 0.5) * 1.1;
-                rotSpeedY += (Math.random() - 0.5) * 1.1;
-                rotSpeedZ += (Math.random() - 0.5) * 1.1;
-                velX += (Math.random() - 0.5) * 0.3;
-            }
-            
-            // --- Wall collisions (Z axis) ---
-            if (posZ + halfSize >= boundaryZ.max) {
-                posZ = boundaryZ.max - halfSize;
-                velZ = -velZ * WALL_RESTITUTION;
-                rotSpeedX += (Math.random() - 0.5) * 1.1;
-                rotSpeedY += (Math.random() - 0.5) * 1.1;
-                rotSpeedZ += (Math.random() - 0.5) * 1.1;
-                velZ += (Math.random() - 0.5) * 0.3;
-            }
-            if (posZ - halfSize <= boundaryZ.min) {
-                posZ = boundaryZ.min + halfSize;
-                velZ = -velZ * WALL_RESTITUTION;
-                rotSpeedX += (Math.random() - 0.5) * 1.1;
-                rotSpeedY += (Math.random() - 0.5) * 1.1;
-                rotSpeedZ += (Math.random() - 0.5) * 1.1;
-                velZ += (Math.random() - 0.5) * 0.3;
-            }
-            
-            // Cap velocities to maintain fun but not fly out of control
-            velX = Math.min(4.5, Math.max(-4.5, velX));
-            velZ = Math.min(4.5, Math.max(-4.5, velZ));
-            velY = Math.min(5.0, Math.max(-7.0, velY));
-            
-            // Apply damping to rotation for natural deceleration
-            rotSpeedX *= (1 - delta * 0.25);
-            rotSpeedY *= (1 - delta * 0.25);
-            rotSpeedZ *= (1 - delta * 0.25);
-            
-            // Update dice position & rotation
-            dice.position.set(posX, posY, posZ);
-            dice.rotation.x += rotSpeedX * delta;
-            dice.rotation.y += rotSpeedY * delta;
-            dice.rotation.z += rotSpeedZ * delta;
-            
-            // === Snow animation (both systems) ===
-            // Main snow
-            const snowPosAttr = snowGeometry.attributes.position;
+            // --- Snow animation ---
+            const snowPosAttr = snow.geometry.attributes.position;
             const snowArray = snowPosAttr.array;
             for (let i = 0; i < SNOW_COUNT; i++) {
-                let y = snowArray[i*3+1] - snowVel[i].y * delta;
-                let x = snowArray[i*3] + snowVel[i].x * delta;
-                let z = snowArray[i*3+2] + snowVel[i].z * delta;
-                if (y < -0.3 || y > 7.5 || Math.abs(x) > 7 || Math.abs(z) > 6.8) {
-                    y = 5.2 + Math.random() * 2.8;
-                    x = (Math.random() - 0.5) * 11;
-                    z = (Math.random() - 0.5) * 10;
-                    snowVel[i].y = 0.7 + Math.random() * 1.8;
-                    snowVel[i].x = (Math.random() - 0.5) * 0.7;
-                    snowVel[i].z = (Math.random() - 0.5) * 0.65;
+                let y = snowArray[i*3+1] - snowVelocities[i].y * delta;
+                let x = snowArray[i*3] + snowVelocities[i].x * delta;
+                let z = snowArray[i*3+2] + snowVelocities[i].z * delta;
+                if (y < -0.5 || y > 7 || Math.abs(x) > 8 || Math.abs(z) > 7) {
+                    y = 5 + Math.random() * 3;
+                    x = (Math.random() - 0.5) * 12;
+                    z = (Math.random() - 0.5) * 11;
+                    snowVelocities[i].y = 0.6 + Math.random() * 1.6;
+                    snowVelocities[i].x = (Math.random() - 0.5) * 0.6;
+                    snowVelocities[i].z = (Math.random() - 0.5) * 0.6;
                 }
                 snowArray[i*3] = x;
                 snowArray[i*3+1] = y;
@@ -473,20 +527,19 @@
             }
             snowPosAttr.needsUpdate = true;
             
-            // Big snow
-            const bigPosAttr = bigSnowGeo.attributes.position;
+            const bigPosAttr = bigSnow.geometry.attributes.position;
             const bigArray = bigPosAttr.array;
             for (let i = 0; i < bigSnowCount; i++) {
                 let y = bigArray[i*3+1] - bigSnowVel[i].y * delta;
                 let x = bigArray[i*3] + bigSnowVel[i].x * delta;
                 let z = bigArray[i*3+2] + bigSnowVel[i].z * delta;
-                if (y < -0.3 || y > 7.2 || Math.abs(x) > 7.2 || Math.abs(z) > 7) {
-                    y = 4.8 + Math.random() * 3.2;
-                    x = (Math.random() - 0.5) * 12;
-                    z = (Math.random() - 0.5) * 11;
-                    bigSnowVel[i].y = 0.5 + Math.random() * 1.4;
-                    bigSnowVel[i].x = (Math.random() - 0.5) * 0.55;
-                    bigSnowVel[i].z = (Math.random() - 0.5) * 0.55;
+                if (y < -0.3 || y > 6.8 || Math.abs(x) > 8.5 || Math.abs(z) > 8) {
+                    y = 4.5 + Math.random() * 3;
+                    x = (Math.random() - 0.5) * 13;
+                    z = (Math.random() - 0.5) * 12;
+                    bigSnowVel[i].y = 0.4 + Math.random() * 1.3;
+                    bigSnowVel[i].x = (Math.random() - 0.5) * 0.5;
+                    bigSnowVel[i].z = (Math.random() - 0.5) * 0.5;
                 }
                 bigArray[i*3] = x;
                 bigArray[i*3+1] = y;
@@ -494,38 +547,23 @@
             }
             bigPosAttr.needsUpdate = true;
             
-            // Gentle drifting rotation for snow
-            snowParticles.rotation.y += 0.0015;
-            bigSnowParticles.rotation.y -= 0.001;
+            // Gentle rotation for snow
+            snow.rotation.y += 0.001;
+            bigSnow.rotation.y -= 0.0008;
             
-            // Dust floating animation
-            const dustPosAttr = dustGeo.attributes.position;
-            const dustArray = dustPosAttr.array;
-            for (let i = 0; i < dustCount; i++) {
-                dustArray[i*3+1] += 0.002;
-                if (dustArray[i*3+1] > 2.6) dustArray[i*3+1] = 0;
-                // slight drift
-                dustArray[i*3] += 0.0005;
-                if (Math.abs(dustArray[i*3]) > 3.8) dustArray[i*3] *= -0.9;
-            }
-            dustPosAttr.needsUpdate = true;
-            
-            // Dynamic lighting subtle pulse
+            // Dynamic lighting
             const time = Date.now() * 0.003;
-            fillLight.intensity = 0.5 + Math.sin(time) * 0.08;
-            rimLight.intensity = 0.6 + Math.cos(time * 0.7) * 0.1;
-            backCool.intensity = 0.45 + Math.sin(time * 1.2) * 0.1;
+            fillLight.intensity = 0.55 + Math.sin(time) * 0.1;
+            rimLight.intensity = 0.6 + Math.cos(time * 0.8) * 0.12;
             
-            // Update controls and render
             controls.update();
             renderer.render(scene, camera);
             requestAnimationFrame(animate);
         }
         
-        // start animation
         animate();
         
-        // --- resize handler ---
+        // Handle window resize
         window.addEventListener('resize', onWindowResize);
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -533,17 +571,17 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
         
-        // small decorative light under dice for ground glow
+        // Small glow under dice
         const groundGlow = new THREE.PointLight(0x88bbff, 0.4);
         groundGlow.position.set(0, 0.2, 0);
         scene.add(groundGlow);
         function glowPulse() {
-            groundGlow.intensity = 0.35 + Math.sin(Date.now() * 0.006) * 0.12;
+            groundGlow.intensity = 0.35 + Math.sin(Date.now() * 0.007) * 0.12;
             requestAnimationFrame(glowPulse);
         }
         glowPulse();
         
-        console.log('Ready: 2D background, 3D dice, wall collisions, super bouncy physics!');
+        console.log('Ready: Click and drag dice to hold & throw! Walls = browser edges.');
     </script>
 </body>
 </html>
